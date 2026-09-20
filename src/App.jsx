@@ -32,7 +32,7 @@ import {
 /* ------------------------------------------------------------------ */
 
 function SignIn() {
-  const [mode, setMode] = useState('in'); // 'in' | 'up'
+  const [mode, setMode] = useState('in'); // 'in' | 'up' | 'forgot'
   const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
@@ -49,6 +49,22 @@ function SignIn() {
     });
     setBusy(false);
     if (err) setError('That email and password did not match. Check them and try again.');
+  }
+
+  async function sendReset() {
+    if (!email.trim()) return setError('Enter your email address first.');
+    setBusy(true);
+    setError('');
+    const { error: err } = await supabase.auth.resetPasswordForEmail(email.trim(), {
+      redirectTo: `${window.location.origin}/`,
+    });
+    setBusy(false);
+    if (err) {
+      setError('That did not send. Check the address and try again.');
+      return;
+    }
+    // Deliberately vague: never reveal whether an address has an account.
+    setDone('If that address has an account, a reset link is on its way. Check your email.');
   }
 
   async function signUp() {
@@ -100,7 +116,9 @@ function SignIn() {
         <p>
           {mode === 'in'
             ? 'Sign in to see who is working where.'
-            : 'Create an account with your work email.'}
+            : mode === 'up'
+              ? 'Create an account with your work email.'
+              : 'We will email you a link to set a new password.'}
         </p>
 
         {mode === 'up' && (
@@ -127,29 +145,37 @@ function SignIn() {
           />
         </div>
 
-        <div className="field">
-          <label htmlFor="password">Password</label>
-          <input
-            id="password"
-            type="password"
-            autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            onKeyDown={(e) => {
-              if (e.key === 'Enter') mode === 'in' ? signIn() : signUp();
-            }}
-          />
-        </div>
+        {mode !== 'forgot' && (
+          <div className="field">
+            <label htmlFor="password">Password</label>
+            <input
+              id="password"
+              type="password"
+              autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') mode === 'in' ? signIn() : signUp();
+              }}
+            />
+          </div>
+        )}
 
         {error && <div className="error">{error}</div>}
 
         <button
           className="btn"
           style={{ marginTop: 12 }}
-          onClick={mode === 'in' ? signIn : signUp}
+          onClick={mode === 'in' ? signIn : mode === 'up' ? signUp : sendReset}
           disabled={busy}
         >
-          {busy ? 'Working…' : mode === 'in' ? 'Sign in' : 'Create account'}
+          {busy
+            ? 'Working…'
+            : mode === 'in'
+              ? 'Sign in'
+              : mode === 'up'
+                ? 'Create account'
+                : 'Email me a reset link'}
         </button>
 
         <button
@@ -157,10 +183,90 @@ function SignIn() {
           style={{ marginTop: 8 }}
           onClick={() => {
             setError('');
-            setMode(mode === 'in' ? 'up' : 'in');
+            setMode(mode === 'up' ? 'in' : mode === 'in' ? 'up' : 'in');
           }}
         >
-          {mode === 'in' ? 'I need an account' : 'I already have an account'}
+          {mode === 'up' ? 'I already have an account' : mode === 'in' ? 'I need an account' : 'Back to sign in'}
+        </button>
+
+        {mode === 'in' && (
+          <button
+            className="chip-btn"
+            style={{ marginTop: 12, width: '100%', border: 'none', background: 'transparent' }}
+            onClick={() => {
+              setError('');
+              setMode('forgot');
+            }}
+          >
+            Forgot your password?
+          </button>
+        )}
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Set a new password (arrived from the emailed reset link)            */
+/* ------------------------------------------------------------------ */
+
+function ResetPassword({ onDone }) {
+  const [password, setPassword] = useState('');
+  const [confirm, setConfirm] = useState('');
+  const [error, setError] = useState('');
+  const [busy, setBusy] = useState(false);
+
+  async function save() {
+    if (password.length < 8) return setError('Use at least 8 characters.');
+    if (password !== confirm) return setError('The two passwords do not match.');
+
+    setBusy(true);
+    setError('');
+    const { error: err } = await supabase.auth.updateUser({ password });
+    setBusy(false);
+
+    if (err) {
+      setError('That did not save. The link may have expired — ask for a new one.');
+      return;
+    }
+    onDone();
+  }
+
+  return (
+    <div className="signin-wrap">
+      <div className="signin">
+        <h1>Set a new password</h1>
+        <p>Pick something you will remember. At least 8 characters.</p>
+
+        <div className="field">
+          <label htmlFor="np">New password</label>
+          <input
+            id="np"
+            type="password"
+            autoComplete="new-password"
+            value={password}
+            onChange={(e) => setPassword(e.target.value)}
+          />
+        </div>
+
+        <div className="field">
+          <label htmlFor="np2">Type it again</label>
+          <input
+            id="np2"
+            type="password"
+            autoComplete="new-password"
+            value={confirm}
+            onChange={(e) => setConfirm(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter') save();
+            }}
+          />
+        </div>
+
+        {error && <div className="error">{error}</div>}
+
+        <button className="btn" style={{ marginTop: 12 }} onClick={save} disabled={busy}>
+          {busy ? 'Saving…' : 'Save new password'}
         </button>
       </div>
     </div>
@@ -213,6 +319,7 @@ function SetupNotice() {
 export default function App() {
   const [session, setSession] = useState(null);
   const [ready, setReady] = useState(false);
+  const [recovery, setRecovery] = useState(false);
 
   const [me, setMe] = useState(null);
   const [meLoaded, setMeLoaded] = useState(false);
@@ -255,7 +362,13 @@ export default function App() {
       .catch(() => {
         if (!cancelled) setReady(true);
       });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+    // A reset link lands here with a recovery token in the URL. Supabase signs
+    // the person in with it, so we must catch that and show the password screen
+    // instead of the calendar.
+    if (window.location.hash.includes('type=recovery')) setRecovery(true);
+
+    const { data: sub } = supabase.auth.onAuthStateChange((event, s) => {
+      if (event === 'PASSWORD_RECOVERY') setRecovery(true);
       setSession(s);
       setMeLoaded(false);
     });
@@ -579,6 +692,19 @@ export default function App() {
 
   if (!configOk) return <SetupNotice />;
   if (!ready) return <div className="app"><p className="empty">Loading…</p></div>;
+
+  if (recovery) {
+    return (
+      <ResetPassword
+        onDone={() => {
+          window.history.replaceState(null, '', window.location.pathname);
+          setRecovery(false);
+          setNotice('Your password was changed.');
+        }}
+      />
+    );
+  }
+
   if (!session) return <SignIn />;
   if (!meLoaded) return <div className="app"><p className="empty">Loading…</p></div>;
   if (!me || !me.approved) return <PendingApproval name={me ? me.full_name : ''} />;
