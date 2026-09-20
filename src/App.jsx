@@ -7,6 +7,7 @@ import TimeOffPanel from './components/TimeOffPanel.jsx';
 import { ChevronLeft, ChevronRight, Users, LogOut, CalendarIcon } from './components/Icons.jsx';
 import DayView from './components/DayView.jsx';
 import WeekView from './components/WeekView.jsx';
+import BulkSchedule from './components/BulkSchedule.jsx';
 import {
   addDays,
   dayTitle,
@@ -227,6 +228,7 @@ export default function App() {
   const [locationFilter, setLocationFilter] = useState('all');
   const [showStaff, setShowStaff] = useState(false);
   const [showTimeOff, setShowTimeOff] = useState(false);
+  const [showBulk, setShowBulk] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [pushState, setPushState] = useState('default');
@@ -411,6 +413,17 @@ export default function App() {
     [profiles]
   );
 
+  const periodDateKeys = useMemo(() => {
+    const keys = [];
+    let d = fromYmd(range.from);
+    const last = fromYmd(range.to);
+    while (d <= last) {
+      keys.push(ymd(d));
+      d = addDays(d, 1);
+    }
+    return keys;
+  }, [range.from, range.to]);
+
   const offUserIds = useMemo(() => {
     if (!selectedDate) return new Set();
     return new Set(
@@ -451,6 +464,44 @@ export default function App() {
       });
     }
     return true;
+  }
+
+  // Writes a whole period in one go, then tells that pharmacist once.
+  async function saveBulk({ inserts, updates, deletes, floaterId }) {
+    try {
+      if (deletes.length > 0) {
+        const { error } = await supabase.from('shifts').delete().in('id', deletes);
+        if (error) return false;
+      }
+
+      if (inserts.length > 0) {
+        const { error } = await supabase
+          .from('shifts')
+          .insert(inserts.map((r) => ({ ...r, created_by: session.user.id })));
+        if (error) return false;
+      }
+
+      for (const u of updates) {
+        const { id, ...rest } = u;
+        const { error } = await supabase.from('shifts').update(rest).eq('id', id);
+        if (error) return false;
+      }
+
+      await loadShifts();
+
+      if (inserts.length + updates.length + deletes.length > 0) {
+        sendPush({
+          userIds: [floaterId],
+          title: 'Your schedule was updated',
+          body: `Your shifts for ${periodTitle} have changed. Open the app to see them.`,
+        });
+      }
+      setNotice('Schedule saved.');
+      return true;
+    } catch (err) {
+      console.error(err);
+      return false;
+    }
   }
 
   async function publishMonth() {
@@ -635,6 +686,12 @@ export default function App() {
         </div>
       )}
 
+      {isManager && (view === 'week' || view === 'biweek') && (
+        <button className="btn" style={{ marginBottom: 10 }} onClick={() => setShowBulk(true)}>
+          Build {view === 'biweek' ? 'these two weeks' : 'this week'}
+        </button>
+      )}
+
       {isManager && (
         <button className="btn ghost" style={{ marginBottom: 10 }} onClick={publishMonth}>
           Post {monthLabel(anchor)} and notify everyone
@@ -684,6 +741,17 @@ export default function App() {
           onClose={() => setSelectedDate(null)}
           onSave={saveShift}
           onDelete={deleteShift}
+        />
+      )}
+
+      {showBulk && (
+        <BulkSchedule
+          dateKeys={periodDateKeys}
+          floaters={floaters}
+          locations={locations}
+          shifts={shifts}
+          onClose={() => setShowBulk(false)}
+          onSave={saveBulk}
         />
       )}
 
