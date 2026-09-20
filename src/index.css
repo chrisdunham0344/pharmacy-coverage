@@ -84,7 +84,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible {
 
 .view-switch {
   display: grid;
-  grid-template-columns: repeat(3, 1fr);
+  grid-template-columns: repeat(4, 1fr);
   gap: 4px;
   background: var(--surface-2);
   border: 1px solid var(--line);
@@ -98,7 +98,8 @@ input:focus, select:focus, textarea:focus, button:focus-visible {
   border: none;
   border-radius: 7px;
   padding: 8px 0;
-  font-size: 14px;
+  font-size: 13px;
+  white-space: nowrap;
   color: var(--muted);
 }
 
