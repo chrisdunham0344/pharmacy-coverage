@@ -16,6 +16,7 @@ export default function StaffPanel({ profiles, onClose, onSave }) {
       initials: (editing.initials.trim() || initialsFrom(editing.full_name)).slice(0, 3).toUpperCase(),
       role: editing.role,
       active: editing.active,
+      approved: editing.approved,
     });
     setBusy(false);
     if (ok) {
@@ -25,6 +26,23 @@ export default function StaffPanel({ profiles, onClose, onSave }) {
       setError('That did not save. Try again.');
     }
   }
+
+  async function approve(p) {
+    setBusy(true);
+    const ok = await onSave({
+      id: p.id,
+      full_name: p.full_name,
+      initials: p.initials,
+      role: p.role,
+      active: true,
+      approved: true,
+    });
+    setBusy(false);
+    if (!ok) setError('That did not save. Try again.');
+  }
+
+  const pending = profiles.filter((p) => !p.approved);
+  const approvedList = profiles.filter((p) => p.approved);
 
   return (
     <div className="overlay" onClick={onClose}>
@@ -37,12 +55,39 @@ export default function StaffPanel({ profiles, onClose, onSave }) {
         </div>
 
         <p style={{ color: 'var(--muted)', fontSize: 13, marginTop: 0 }}>
-          New people are added by inviting them in Supabase. Their name and initials are edited here.
+          Pharmacists sign up with their work email. Approve them here before they can see the
+          schedule.
         </p>
 
-        {profiles.length === 0 && <p className="empty">No one has signed in yet.</p>}
+        {pending.length > 0 && (
+          <>
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
+              Waiting for approval
+            </div>
+            {pending.map((p) => (
+              <div className="shift-row" key={p.id}>
+                <span className="bar" style={{ background: '#e0a44c' }} />
+                <div style={{ flex: 1, minWidth: 0 }}>
+                  <div className="who">{p.full_name}</div>
+                  <div className="meta">Signed up, not approved yet</div>
+                </div>
+                <button
+                  className="chip-btn on"
+                  disabled={busy}
+                  onClick={() => approve(p)}
+                >
+                  Approve
+                </button>
+              </div>
+            ))}
+            <div style={{ height: 18 }} />
+            <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Approved</div>
+          </>
+        )}
 
-        {profiles.map((p) => (
+        {approvedList.length === 0 && <p className="empty">No one is approved yet.</p>}
+
+        {approvedList.map((p) => (
           <div className="shift-row" key={p.id}>
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="who">{p.full_name}</div>
