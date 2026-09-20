@@ -16,13 +16,16 @@ import {
 } from './push.js';
 
 /* ------------------------------------------------------------------ */
-/* Sign in                                                             */
+/* Sign in and sign up                                                 */
 /* ------------------------------------------------------------------ */
 
 function SignIn() {
+  const [mode, setMode] = useState('in'); // 'in' | 'up'
+  const [fullName, setFullName] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
+  const [done, setDone] = useState('');
   const [busy, setBusy] = useState(false);
 
   async function signIn() {
@@ -36,11 +39,70 @@ function SignIn() {
     if (err) setError('That email and password did not match. Check them and try again.');
   }
 
+  async function signUp() {
+    if (!fullName.trim()) return setError('Enter your name.');
+    if (password.length < 8) return setError('Use at least 8 characters for your password.');
+
+    setBusy(true);
+    setError('');
+    const { error: err } = await supabase.auth.signUp({
+      email: email.trim(),
+      password,
+      options: { data: { full_name: fullName.trim() } },
+    });
+    setBusy(false);
+
+    if (err) {
+      // The database trigger blocks addresses outside the approved domain.
+      if (String(err.message).includes('EMAIL_DOMAIN_NOT_ALLOWED')) {
+        setError('Use your work email address. Personal addresses cannot register here.');
+      } else if (String(err.message).toLowerCase().includes('already')) {
+        setError('An account with that email already exists. Try signing in.');
+      } else {
+        setError('That did not work. Check your email address and try again.');
+      }
+      return;
+    }
+
+    setDone('Account created. A manager has to approve you before you can see the schedule.');
+  }
+
+  if (done) {
+    return (
+      <div className="signin-wrap">
+        <div className="signin">
+          <h1>Almost there</h1>
+          <p>{done}</p>
+          <button className="btn ghost" onClick={() => { setDone(''); setMode('in'); }}>
+            Back to sign in
+          </button>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="signin-wrap">
       <div className="signin">
         <h1>Pharmacist coverage</h1>
-        <p>Sign in to see who is working where.</p>
+        <p>
+          {mode === 'in'
+            ? 'Sign in to see who is working where.'
+            : 'Create an account with your work email.'}
+        </p>
+
+        {mode === 'up' && (
+          <div className="field">
+            <label htmlFor="name">Full name</label>
+            <input
+              id="name"
+              type="text"
+              autoComplete="name"
+              value={fullName}
+              onChange={(e) => setFullName(e.target.value)}
+            />
+          </div>
+        )}
 
         <div className="field">
           <label htmlFor="email">Email</label>
@@ -58,28 +120,64 @@ function SignIn() {
           <input
             id="password"
             type="password"
-            autoComplete="current-password"
+            autoComplete={mode === 'in' ? 'current-password' : 'new-password'}
             value={password}
             onChange={(e) => setPassword(e.target.value)}
             onKeyDown={(e) => {
-              if (e.key === 'Enter') signIn();
+              if (e.key === 'Enter') mode === 'in' ? signIn() : signUp();
             }}
           />
         </div>
 
         {error && <div className="error">{error}</div>}
 
-        <button className="btn" style={{ marginTop: 12 }} onClick={signIn} disabled={busy}>
-          {busy ? 'Signing in…' : 'Sign in'}
+        <button
+          className="btn"
+          style={{ marginTop: 12 }}
+          onClick={mode === 'in' ? signIn : signUp}
+          disabled={busy}
+        >
+          {busy ? 'Working…' : mode === 'in' ? 'Sign in' : 'Create account'}
+        </button>
+
+        <button
+          className="btn ghost"
+          style={{ marginTop: 8 }}
+          onClick={() => {
+            setError('');
+            setMode(mode === 'in' ? 'up' : 'in');
+          }}
+        >
+          {mode === 'in' ? 'I need an account' : 'I already have an account'}
         </button>
       </div>
     </div>
   );
 }
 
+/* ------------------------------------------------------------------ */
+/* Waiting for approval                                                */
+/* ------------------------------------------------------------------ */
+
+function PendingApproval({ name }) {
+  return (
+    <div className="signin-wrap">
+      <div className="signin">
+        <h1>Waiting for approval</h1>
+        <p>
+          {name ? `${name}, your` : 'Your'} account is set up. A manager has to approve it before
+          the schedule appears. You will not need to do anything else — just sign in again later.
+        </p>
+        <button className="btn ghost" onClick={() => supabase.auth.signOut()}>
+          Sign out
+        </button>
+      </div>
+    </div>
+  );
+}
 
 /* ------------------------------------------------------------------ */
-/* Setup notice — shown when the environment variables are missing      */
+/* Setup notice                                                        */
 /* ------------------------------------------------------------------ */
 
 function SetupNotice() {
@@ -88,9 +186,8 @@ function SetupNotice() {
       <div className="signin">
         <h1>Not connected yet</h1>
         <p>
-          This app cannot reach its database. In Vercel, open Settings then
-          Environment Variables and add VITE_SUPABASE_URL and
-          VITE_SUPABASE_ANON_KEY, then redeploy.
+          This app cannot reach its database. In Vercel, open Settings then Environment Variables
+          and add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY, then redeploy.
         </p>
       </div>
     </div>
@@ -106,9 +203,11 @@ export default function App() {
   const [ready, setReady] = useState(false);
 
   const [me, setMe] = useState(null);
+  const [meLoaded, setMeLoaded] = useState(false);
   const [locations, setLocations] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [shifts, setShifts] = useState([]);
+  const [timeOff, setTimeOff] = useState([]);
 
   const [viewDate, setViewDate] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(null);
@@ -116,7 +215,6 @@ export default function App() {
   const [locationFilter, setLocationFilter] = useState('all');
   const [showStaff, setShowStaff] = useState(false);
   const [showTimeOff, setShowTimeOff] = useState(false);
-  const [timeOff, setTimeOff] = useState([]);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [pushState, setPushState] = useState('default');
@@ -140,7 +238,10 @@ export default function App() {
       .catch(() => {
         if (!cancelled) setReady(true);
       });
-    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
+    const { data: sub } = supabase.auth.onAuthStateChange((_event, s) => {
+      setSession(s);
+      setMeLoaded(false);
+    });
     return () => {
       cancelled = true;
       sub.subscription.unsubscribe();
@@ -151,17 +252,29 @@ export default function App() {
 
   const loadCore = useCallback(async () => {
     if (!session) return;
-    const [meRes, locRes, profRes] = await Promise.all([
-      supabase.from('profiles').select('*').eq('id', session.user.id).maybeSingle(),
+
+    const { data: meRow } = await supabase
+      .from('profiles')
+      .select('*')
+      .eq('id', session.user.id)
+      .maybeSingle();
+
+    setMe(meRow);
+    setMeLoaded(true);
+
+    // An unapproved account can read nothing else, so stop here.
+    if (!meRow || !meRow.approved) return;
+
+    const [locRes, profRes] = await Promise.all([
       supabase.from('locations').select('*').eq('active', true).order('sort_order'),
       supabase.from('profiles').select('*').order('full_name'),
     ]);
-    if (meRes.error || locRes.error || profRes.error) {
-      setLoadError('The schedule could not load. Pull down to refresh, or try signing out and back in.');
+
+    if (locRes.error || profRes.error) {
+      setLoadError('The schedule could not load. Try signing out and back in.');
       return;
     }
     setLoadError('');
-    setMe(meRes.data);
     setLocations(locRes.data || []);
     setProfiles(profRes.data || []);
   }, [session]);
@@ -192,17 +305,19 @@ export default function App() {
     }
   }
 
-  /* ---------- shifts for the visible month ---------- */
+  /* ---------- shifts and time off for the visible month ---------- */
 
   const range = useMemo(() => monthRange(viewDate), [viewDate]);
 
   const loadShifts = useCallback(async () => {
-    if (!session) return;
+    if (!session || !me || !me.approved) return;
+
     const { data, error } = await supabase
       .from('shifts')
       .select('*')
       .gte('shift_date', range.from)
       .lte('shift_date', range.to);
+
     if (error) {
       setLoadError('The schedule could not load. Check your connection and try again.');
       return;
@@ -217,7 +332,7 @@ export default function App() {
       .lte('start_date', range.to)
       .gte('end_date', range.from);
     setTimeOff(off || []);
-  }, [session, range.from, range.to]);
+  }, [session, me, range.from, range.to]);
 
   useEffect(() => {
     loadShifts();
@@ -237,13 +352,15 @@ export default function App() {
     [profiles]
   );
 
-  const visibleShifts = useMemo(() => {
-    return shifts.filter((s) => {
-      if (mineOnly && s.pharmacist_id !== session?.user?.id) return false;
-      if (locationFilter !== 'all' && s.location_id !== locationFilter) return false;
-      return true;
-    });
-  }, [shifts, mineOnly, locationFilter, session]);
+  const visibleShifts = useMemo(
+    () =>
+      shifts.filter((s) => {
+        if (mineOnly && s.pharmacist_id !== session?.user?.id) return false;
+        if (locationFilter !== 'all' && s.location_id !== locationFilter) return false;
+        return true;
+      }),
+    [shifts, mineOnly, locationFilter, session]
+  );
 
   const shiftsByDate = useMemo(() => {
     const map = {};
@@ -261,9 +378,16 @@ export default function App() {
     return map;
   }, [visibleShifts, locationsById]);
 
-  const activeProfiles = useMemo(() => profiles.filter((p) => p.active), [profiles]);
+  const activeProfiles = useMemo(
+    () => profiles.filter((p) => p.active && p.approved),
+    [profiles]
+  );
 
-  // Everyone with approved time off covering the day that is open in the sheet.
+  const pendingCount = useMemo(
+    () => profiles.filter((p) => !p.approved).length,
+    [profiles]
+  );
+
   const offUserIds = useMemo(() => {
     if (!selectedDate) return new Set();
     return new Set(
@@ -289,12 +413,12 @@ export default function App() {
     const query = shift.id
       ? supabase.from('shifts').update(payload).eq('id', shift.id)
       : supabase.from('shifts').insert(payload);
+
     const { error } = await query;
     setSaving(false);
     if (error) return false;
     await loadShifts();
 
-    // Tell the pharmacist their own shift changed.
     if (shift.pharmacist_id) {
       const loc = locationsById[shift.location_id];
       sendPush({
@@ -306,7 +430,6 @@ export default function App() {
     return true;
   }
 
-  // Manager announces that the month is set.
   async function publishMonth() {
     const ok = await sendPush({
       userIds: null,
@@ -324,7 +447,13 @@ export default function App() {
   async function saveProfile(p) {
     const { error } = await supabase
       .from('profiles')
-      .update({ full_name: p.full_name, initials: p.initials, role: p.role, active: p.active })
+      .update({
+        full_name: p.full_name,
+        initials: p.initials,
+        role: p.role,
+        active: p.active,
+        approved: p.approved,
+      })
       .eq('id', p.id);
     if (error) return false;
     await loadCore();
@@ -338,40 +467,48 @@ export default function App() {
   /* ---------- render ---------- */
 
   if (!configOk) return <SetupNotice />;
-  if (!ready) {
-    return <div className="app"><p className="empty">Loading…</p></div>;
-  }
+  if (!ready) return <div className="app"><p className="empty">Loading…</p></div>;
   if (!session) return <SignIn />;
+  if (!meLoaded) return <div className="app"><p className="empty">Loading…</p></div>;
+  if (!me || !me.approved) return <PendingApproval name={me ? me.full_name : ''} />;
 
   return (
     <div className="app">
       <header className="topbar">
         <div>
           <h1>Pharmacist coverage</h1>
-          <div className="sub">{me ? me.full_name : 'Loading…'}</div>
+          <div className="sub">{me.full_name}</div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            className="icon-btn"
-            onClick={() => setShowTimeOff(true)}
-            aria-label="Time off"
-          >
+          <button className="icon-btn" onClick={() => setShowTimeOff(true)} aria-label="Time off">
             <CalendarIcon />
           </button>
           {isManager && (
-            <button className="icon-btn" onClick={() => setShowStaff(true)} aria-label="Pharmacists">
+            <button
+              className="icon-btn"
+              onClick={() => setShowStaff(true)}
+              aria-label={pendingCount > 0 ? `Pharmacists, ${pendingCount} waiting` : 'Pharmacists'}
+              style={pendingCount > 0 ? { borderColor: 'var(--accent)', color: 'var(--accent)' } : undefined}
+            >
               <Users />
             </button>
           )}
-          <button
-            className="icon-btn"
-            onClick={() => supabase.auth.signOut()}
-            aria-label="Sign out"
-          >
+          <button className="icon-btn" onClick={() => supabase.auth.signOut()} aria-label="Sign out">
             <LogOut />
           </button>
         </div>
       </header>
+
+      {isManager && pendingCount > 0 && (
+        <div className="form-card" style={{ marginBottom: 10, fontSize: 13 }}>
+          <div style={{ marginBottom: 8 }}>
+            {pendingCount} {pendingCount === 1 ? 'person is' : 'people are'} waiting to be approved.
+          </div>
+          <button className="btn ghost" onClick={() => setShowStaff(true)}>
+            Review them
+          </button>
+        </div>
+      )}
 
       <div className="month-bar">
         <button className="icon-btn" onClick={() => shiftMonth(-1)} aria-label="Previous month">
@@ -389,10 +526,7 @@ export default function App() {
       </div>
 
       <div className="toggle-row">
-        <button
-          className={`chip-btn${mineOnly ? ' on' : ''}`}
-          onClick={() => setMineOnly((v) => !v)}
-        >
+        <button className={`chip-btn${mineOnly ? ' on' : ''}`} onClick={() => setMineOnly((v) => !v)}>
           My shifts
         </button>
         <button
@@ -477,7 +611,7 @@ export default function App() {
         />
       )}
 
-      {showTimeOff && me && (
+      {showTimeOff && (
         <TimeOffPanel
           me={me}
           profilesById={profilesById}
@@ -488,11 +622,7 @@ export default function App() {
       )}
 
       {showStaff && (
-        <StaffPanel
-          profiles={profiles}
-          onClose={() => setShowStaff(false)}
-          onSave={saveProfile}
-        />
+        <StaffPanel profiles={profiles} onClose={() => setShowStaff(false)} onSave={saveProfile} />
       )}
     </div>
   );
