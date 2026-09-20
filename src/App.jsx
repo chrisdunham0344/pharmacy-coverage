@@ -5,7 +5,18 @@ import DaySheet from './components/DaySheet.jsx';
 import StaffPanel from './components/StaffPanel.jsx';
 import TimeOffPanel from './components/TimeOffPanel.jsx';
 import { ChevronLeft, ChevronRight, Users, LogOut, CalendarIcon } from './components/Icons.jsx';
-import { monthLabel, monthRange } from './utils.js';
+import DayView from './components/DayView.jsx';
+import WeekView from './components/WeekView.jsx';
+import {
+  addDays,
+  dayTitle,
+  fromYmd,
+  monthLabel,
+  monthRange,
+  weekStart,
+  weekTitle,
+  ymd,
+} from './utils.js';
 import {
   enablePush,
   isIosSafariNotInstalled,
@@ -209,7 +220,8 @@ export default function App() {
   const [shifts, setShifts] = useState([]);
   const [timeOff, setTimeOff] = useState([]);
 
-  const [viewDate, setViewDate] = useState(() => new Date());
+  const [view, setView] = useState('day');
+  const [anchor, setAnchor] = useState(() => new Date());
   const [selectedDate, setSelectedDate] = useState(null);
   const [mineOnly, setMineOnly] = useState(false);
   const [locationFilter, setLocationFilter] = useState('all');
@@ -307,7 +319,17 @@ export default function App() {
 
   /* ---------- shifts and time off for the visible month ---------- */
 
-  const range = useMemo(() => monthRange(viewDate), [viewDate]);
+  const range = useMemo(() => {
+    if (view === 'day') {
+      const key = ymd(anchor);
+      return { from: key, to: key };
+    }
+    if (view === 'week') {
+      const start = weekStart(anchor);
+      return { from: ymd(start), to: ymd(addDays(start, 6)) };
+    }
+    return monthRange(anchor);
+  }, [view, anchor]);
 
   const loadShifts = useCallback(async () => {
     if (!session || !me || !me.approved) return;
@@ -434,7 +456,7 @@ export default function App() {
     const ok = await sendPush({
       userIds: null,
       title: 'Schedule posted',
-      body: `The ${monthLabel(viewDate)} schedule is up. Open the app to see your shifts.`,
+      body: `The ${monthLabel(anchor)} schedule is up. Open the app to see your shifts.`,
     });
     setNotice(ok ? 'Everyone with notifications on has been told.' : 'The notification could not be sent.');
   }
@@ -460,9 +482,16 @@ export default function App() {
     return true;
   }
 
-  function shiftMonth(delta) {
-    setViewDate((d) => new Date(d.getFullYear(), d.getMonth() + delta, 1));
+  function step(delta) {
+    setAnchor((d) => {
+      if (view === 'day') return addDays(d, delta);
+      if (view === 'week') return addDays(d, delta * 7);
+      return new Date(d.getFullYear(), d.getMonth() + delta, 1);
+    });
   }
+
+  const periodTitle =
+    view === 'day' ? dayTitle(anchor) : view === 'week' ? weekTitle(anchor) : monthLabel(anchor);
 
   /* ---------- render ---------- */
 
@@ -510,16 +539,22 @@ export default function App() {
         </div>
       )}
 
+      <div className="view-switch">
+        <button className={view === 'day' ? 'on' : ''} onClick={() => setView('day')}>Day</button>
+        <button className={view === 'week' ? 'on' : ''} onClick={() => setView('week')}>Week</button>
+        <button className={view === 'month' ? 'on' : ''} onClick={() => setView('month')}>Month</button>
+      </div>
+
       <div className="month-bar">
-        <button className="icon-btn" onClick={() => shiftMonth(-1)} aria-label="Previous month">
+        <button className="icon-btn" onClick={() => step(-1)} aria-label="Previous">
           <ChevronLeft />
         </button>
-        <div className="month-title">{monthLabel(viewDate)}</div>
+        <div className="month-title">{periodTitle}</div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="icon-btn" onClick={() => setViewDate(new Date())} aria-label="This month">
+          <button className="icon-btn" onClick={() => setAnchor(new Date())} aria-label="Today">
             <CalendarIcon />
           </button>
-          <button className="icon-btn" onClick={() => shiftMonth(1)} aria-label="Next month">
+          <button className="icon-btn" onClick={() => step(1)} aria-label="Next">
             <ChevronRight />
           </button>
         </div>
@@ -582,19 +617,47 @@ export default function App() {
 
       {isManager && (
         <button className="btn ghost" style={{ marginBottom: 10 }} onClick={publishMonth}>
-          Post {monthLabel(viewDate)} and notify everyone
+          Post {monthLabel(anchor)} and notify everyone
         </button>
       )}
 
-      <MonthGrid
-        viewDate={viewDate}
-        shiftsByDate={shiftsByDate}
-        locationsById={locationsById}
-        profilesById={profilesById}
-        onSelectDate={setSelectedDate}
-        showGaps={!mineOnly && locationFilter === 'all'}
-        locationCount={locations.length}
-      />
+      {view === 'day' && (
+        <DayView
+          dateKey={ymd(anchor)}
+          shifts={shiftsByDate[ymd(anchor)] || []}
+          locations={
+            locationFilter === 'all' ? locations : locations.filter((l) => l.id === locationFilter)
+          }
+          profilesById={profilesById}
+          isManager={isManager}
+          onEdit={() => setSelectedDate(ymd(anchor))}
+          onAdd={() => setSelectedDate(ymd(anchor))}
+        />
+      )}
+
+      {view === 'week' && (
+        <WeekView
+          anchor={anchor}
+          shiftsByDate={shiftsByDate}
+          locationsById={locationsById}
+          profilesById={profilesById}
+          locationCount={locations.length}
+          onSelectDate={setSelectedDate}
+          showGaps={!mineOnly && locationFilter === 'all'}
+        />
+      )}
+
+      {view === 'month' && (
+        <MonthGrid
+          viewDate={anchor}
+          shiftsByDate={shiftsByDate}
+          locationsById={locationsById}
+          profilesById={profilesById}
+          onSelectDate={setSelectedDate}
+          showGaps={!mineOnly && locationFilter === 'all'}
+          locationCount={locations.length}
+        />
+      )}
 
       {selectedDate && (
         <DaySheet
