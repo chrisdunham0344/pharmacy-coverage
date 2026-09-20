@@ -23,6 +23,7 @@ export default function BulkSchedule({
   const [error, setError] = useState('');
   const [rows, setRows] = useState(() => buildRows(floaters[0] ? floaters[0].id : ''));
   const [fillStore, setFillStore] = useState(locations[0] ? locations[0].id : '');
+  const [fillScope, setFillScope] = useState('all');
 
   function buildRows(id) {
     const next = {};
@@ -69,13 +70,15 @@ export default function BulkSchedule({
     setRows((r) => ({ ...r, [key]: { ...r[key], [field]: value } }));
   }
 
-  // Fills every empty weekday with the chosen store and the default hours.
-  function fillWeekdays() {
+  // Fills empty days in the chosen stretch with the store and default hours.
+  function fill() {
     setRows((r) => {
       const next = { ...r };
       for (const key of dateKeys) {
         const dow = fromYmd(key).getDay();
-        if (dow === 0 || dow === 6) continue;
+        const weekend = dow === 0 || dow === 6;
+        if (fillScope === 'weekdays' && weekend) continue;
+        if (fillScope === 'weekends' && !weekend) continue;
         if (next[key].locked) continue;
         if (next[key].location_id) continue;
         next[key] = {
@@ -200,32 +203,37 @@ export default function BulkSchedule({
             </div>
           </div>
 
-          <div className="field">
-            <label htmlFor="fs">Fill every empty weekday with</label>
-            <select id="fs" value={fillStore} onChange={(e) => setFillStore(e.target.value)}>
-              {locations.map((l) => (
-                <option key={l.id} value={l.id}>{l.name}</option>
-              ))}
-            </select>
+          <div className="row-2">
+            <div className="field">
+              <label htmlFor="fs">Fill empty days with</label>
+              <select id="fs" value={fillStore} onChange={(e) => setFillStore(e.target.value)}>
+                {locations.map((l) => (
+                  <option key={l.id} value={l.id}>{l.name}</option>
+                ))}
+              </select>
+            </div>
+            <div className="field">
+              <label htmlFor="fsc">Which days</label>
+              <select id="fsc" value={fillScope} onChange={(e) => setFillScope(e.target.value)}>
+                <option value="all">Every day</option>
+                <option value="weekdays">Mon to Fri</option>
+                <option value="weekends">Sat and Sun</option>
+              </select>
+            </div>
           </div>
 
           <div className="row-2">
             <button className="btn ghost" onClick={clearAll}>Clear all</button>
-            <button className="btn ghost" onClick={fillWeekdays}>Fill weekdays</button>
+            <button className="btn ghost" onClick={fill}>Fill</button>
           </div>
         </div>
 
         {dateKeys.map((key) => {
           const row = rows[key] || {};
           const d = fromYmd(key);
-          const weekend = d.getDay() === 0 || d.getDay() === 6;
 
           return (
-            <div
-              key={key}
-              className="shift-row"
-              style={{ alignItems: 'center', background: weekend ? 'var(--surface-2)' : '#fff' }}
-            >
+            <div key={key} className="shift-row" style={{ alignItems: 'center' }}>
               <div style={{ width: 58, flex: '0 0 auto' }}>
                 <div style={{ fontSize: 12, color: 'var(--muted)' }}>
                   {d.toLocaleDateString(undefined, { weekday: 'short' })}
