@@ -229,6 +229,9 @@ export default function App() {
   const [showStaff, setShowStaff] = useState(false);
   const [showTimeOff, setShowTimeOff] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
+  const [bulkShifts, setBulkShifts] = useState([]);
+  const [bulkKeys, setBulkKeys] = useState([]);
+  const [bulkBusy, setBulkBusy] = useState(false);
   const [saving, setSaving] = useState(false);
   const [loadError, setLoadError] = useState('');
   const [pushState, setPushState] = useState('default');
@@ -413,17 +416,6 @@ export default function App() {
     [profiles]
   );
 
-  const periodDateKeys = useMemo(() => {
-    const keys = [];
-    let d = fromYmd(range.from);
-    const last = fromYmd(range.to);
-    while (d <= last) {
-      keys.push(ymd(d));
-      d = addDays(d, 1);
-    }
-    return keys;
-  }, [range.from, range.to]);
-
   const offUserIds = useMemo(() => {
     if (!selectedDate) return new Set();
     return new Set(
@@ -466,6 +458,33 @@ export default function App() {
     return true;
   }
 
+  // The one way in. Always a two week block starting from the current week,
+  // and it loads that block's shifts itself so the view you happen to be in
+  // does not matter.
+  async function openBuilder() {
+    setBulkBusy(true);
+    const start = weekStart(anchor);
+    const keys = [];
+    for (let i = 0; i < 14; i++) keys.push(ymd(addDays(start, i)));
+
+    const { data, error } = await supabase
+      .from('shifts')
+      .select('*')
+      .gte('shift_date', keys[0])
+      .lte('shift_date', keys[13]);
+
+    setBulkBusy(false);
+
+    if (error) {
+      setNotice('The schedule could not load. Check your connection and try again.');
+      return;
+    }
+
+    setBulkKeys(keys);
+    setBulkShifts(data || []);
+    setShowBulk(true);
+  }
+
   // Writes a whole period in one go, then tells that pharmacist once.
   async function saveBulk({ inserts, updates, deletes, floaterId }) {
     try {
@@ -493,7 +512,7 @@ export default function App() {
         sendPush({
           userIds: [floaterId],
           title: 'Your schedule was updated',
-          body: `Your shifts for ${periodTitle} have changed. Open the app to see them.`,
+          body: `Your shifts for ${weekTitle(anchor, 14)} have changed. Open the app to see them.`,
         });
       }
       setNotice('Schedule saved.');
@@ -504,13 +523,17 @@ export default function App() {
     }
   }
 
-  async function publishMonth() {
+  // Tells everyone — including the seven store pharmacists, who are not on the
+  // schedule themselves but need to know when a floater is coming.
+  async function announceSchedule() {
     const ok = await sendPush({
       userIds: null,
       title: 'Schedule posted',
-      body: `The ${monthLabel(anchor)} schedule is up. Open the app to see your shifts.`,
+      body: `The schedule for ${weekTitle(anchor, 14)} is up. Open the app to see it.`,
     });
-    setNotice(ok ? 'Everyone with notifications on has been told.' : 'The notification could not be sent.');
+    setNotice(
+      ok ? 'Everyone with notifications on has been told.' : 'The notification could not be sent.'
+    );
   }
 
   async function deleteShift(id) {
@@ -686,15 +709,15 @@ export default function App() {
         </div>
       )}
 
-      {isManager && (view === 'week' || view === 'biweek') && (
-        <button className="btn" style={{ marginBottom: 10 }} onClick={() => setShowBulk(true)}>
-          Build {view === 'biweek' ? 'these two weeks' : 'this week'}
+      {isManager && (
+        <button className="btn" style={{ marginBottom: 10 }} onClick={openBuilder} disabled={bulkBusy}>
+          {bulkBusy ? 'Opening…' : 'Make schedule'}
         </button>
       )}
 
       {isManager && (
-        <button className="btn ghost" style={{ marginBottom: 10 }} onClick={publishMonth}>
-          Post {monthLabel(anchor)} and notify everyone
+        <button className="btn ghost" style={{ marginBottom: 10 }} onClick={announceSchedule}>
+          Tell everyone the schedule is posted
         </button>
       )}
 
@@ -703,7 +726,6 @@ export default function App() {
           shifts={shiftsByDate[ymd(anchor)] || []}
           locationsById={locationsById}
           profilesById={profilesById}
-          isManager={isManager}
           onOpenDay={() => setSelectedDate(ymd(anchor))}
         />
       )}
@@ -746,10 +768,10 @@ export default function App() {
 
       {showBulk && (
         <BulkSchedule
-          dateKeys={periodDateKeys}
+          dateKeys={bulkKeys}
           floaters={floaters}
           locations={locations}
-          shifts={shifts}
+          shifts={bulkShifts}
           onClose={() => setShowBulk(false)}
           onSave={saveBulk}
         />
