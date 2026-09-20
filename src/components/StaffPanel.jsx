@@ -17,6 +17,7 @@ export default function StaffPanel({ profiles, onClose, onSave }) {
       role: editing.role,
       active: editing.active,
       approved: editing.approved,
+      is_floater: editing.is_floater,
     });
     setBusy(false);
     if (ok) {
@@ -36,6 +37,7 @@ export default function StaffPanel({ profiles, onClose, onSave }) {
       role: p.role,
       active: true,
       approved: true,
+      is_floater: p.is_floater,
     });
     setBusy(false);
     if (!ok) setError('That did not save. Try again.');
@@ -92,7 +94,8 @@ export default function StaffPanel({ profiles, onClose, onSave }) {
             <div style={{ flex: 1, minWidth: 0 }}>
               <div className="who">{p.full_name}</div>
               <div className="meta">
-                {p.initials} · {p.role === 'manager' ? 'Manager' : 'Pharmacist'}
+                {p.initials} · {p.is_floater ? 'Floating pharmacist' : 'Store pharmacist'}
+                {p.role === 'manager' ? ' · Manager' : ''}
                 {p.active ? '' : ' · Inactive'}
               </div>
             </div>
@@ -136,6 +139,18 @@ export default function StaffPanel({ profiles, onClose, onSave }) {
                   <option value="manager">Manager (can edit)</option>
                 </select>
               </div>
+            </div>
+
+            <div className="field">
+              <label htmlFor="floater">Do they float between stores?</label>
+              <select
+                id="floater"
+                value={editing.is_floater ? 'yes' : 'no'}
+                onChange={(e) => setEditing({ ...editing, is_floater: e.target.value === 'yes' })}
+              >
+                <option value="no">No — works at one store, view only</option>
+                <option value="yes">Yes — can be put on the schedule</option>
+              </select>
             </div>
 
             <div className="field">

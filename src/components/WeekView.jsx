@@ -5,9 +5,7 @@ export default function WeekView({
   shiftsByDate,
   locationsById,
   profilesById,
-  locationCount,
   onSelectDate,
-  showGaps,
 }) {
   const cells = weekCells(anchor);
   const todayKey = ymd(new Date());
@@ -16,8 +14,6 @@ export default function WeekView({
     <div>
       {cells.map((cell) => {
         const list = shiftsByDate[cell.key] || [];
-        const coveredStores = new Set(list.map((s) => s.location_id)).size;
-        const short = showGaps && coveredStores < locationCount;
 
         return (
           <button
@@ -31,26 +27,25 @@ export default function WeekView({
             </span>
 
             <span className="week-shifts">
-              {list.length === 0 && <span className="uncovered">Nobody scheduled</span>}
+              {list.length === 0 && <span className="meta">Nobody floating</span>}
 
               {list.map((s) => {
                 const loc = locationsById[s.location_id];
                 const person = s.pharmacist_id ? profilesById[s.pharmacist_id] : null;
                 return (
-                  <span className="tag" key={s.id}>
+                  <span
+                    className="tag"
+                    key={s.id}
+                    style={
+                      loc ? { borderColor: loc.color, background: `${loc.color}12` } : undefined
+                    }
+                  >
                     <span className="dot" style={{ background: loc ? loc.color : '#94a3b8' }} />
                     {loc ? loc.abbrev : '??'} · {person ? person.full_name.split(' ')[0] : 'Open'} ·{' '}
                     {fmtTime(s.start_time)}
                   </span>
                 );
               })}
-
-              {short && list.length > 0 && (
-                <span className="uncovered">
-                  {locationCount - coveredStores} store
-                  {locationCount - coveredStores === 1 ? '' : 's'} uncovered
-                </span>
-              )}
             </span>
           </button>
         );
