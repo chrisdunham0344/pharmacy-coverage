@@ -324,9 +324,9 @@ export default function App() {
       const key = ymd(anchor);
       return { from: key, to: key };
     }
-    if (view === 'week') {
+    if (view === 'week' || view === 'biweek') {
       const start = weekStart(anchor);
-      return { from: ymd(start), to: ymd(addDays(start, 6)) };
+      return { from: ymd(start), to: ymd(addDays(start, view === 'biweek' ? 13 : 6)) };
     }
     return monthRange(anchor);
   }, [view, anchor]);
@@ -487,12 +487,19 @@ export default function App() {
     setAnchor((d) => {
       if (view === 'day') return addDays(d, delta);
       if (view === 'week') return addDays(d, delta * 7);
+      if (view === 'biweek') return addDays(d, delta * 14);
       return new Date(d.getFullYear(), d.getMonth() + delta, 1);
     });
   }
 
   const periodTitle =
-    view === 'day' ? dayTitle(anchor) : view === 'week' ? weekTitle(anchor) : monthLabel(anchor);
+    view === 'day'
+      ? dayTitle(anchor)
+      : view === 'week'
+        ? weekTitle(anchor)
+        : view === 'biweek'
+          ? weekTitle(anchor, 14)
+          : monthLabel(anchor);
 
   /* ---------- render ---------- */
 
@@ -554,6 +561,7 @@ export default function App() {
       <div className="view-switch">
         <button className={view === 'day' ? 'on' : ''} onClick={() => setView('day')}>Day</button>
         <button className={view === 'week' ? 'on' : ''} onClick={() => setView('week')}>Week</button>
+        <button className={view === 'biweek' ? 'on' : ''} onClick={() => setView('biweek')}>2 Wks</button>
         <button className={view === 'month' ? 'on' : ''} onClick={() => setView('month')}>Month</button>
       </div>
 
@@ -643,9 +651,10 @@ export default function App() {
         />
       )}
 
-      {view === 'week' && (
+      {(view === 'week' || view === 'biweek') && (
         <WeekView
           anchor={anchor}
+          days={view === 'biweek' ? 14 : 7}
           shiftsByDate={shiftsByDate}
           locationsById={locationsById}
           profilesById={profilesById}
