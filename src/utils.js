@@ -37,9 +37,9 @@ export function weekStart(date) {
   return addDays(date, -date.getDay());
 }
 
-export function weekTitle(date) {
+export function weekTitle(date, days = 7) {
   const start = weekStart(date);
-  const end = addDays(start, 6);
+  const end = addDays(start, days - 1);
   const sameMonth = start.getMonth() === end.getMonth();
   const startStr = start.toLocaleDateString(undefined, { month: 'short', day: 'numeric' });
   const endStr = end.toLocaleDateString(
@@ -49,10 +49,10 @@ export function weekTitle(date) {
   return `${startStr} – ${endStr}`;
 }
 
-export function weekCells(date) {
+export function weekCells(date, days = 7) {
   const start = weekStart(date);
   const cells = [];
-  for (let i = 0; i < 7; i++) {
+  for (let i = 0; i < days; i++) {
     const d = addDays(start, i);
     cells.push({ date: d, key: ymd(d) });
   }
