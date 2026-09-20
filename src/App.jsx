@@ -400,8 +400,9 @@ export default function App() {
     return map;
   }, [visibleShifts, locationsById]);
 
-  const activeProfiles = useMemo(
-    () => profiles.filter((p) => p.active && p.approved),
+  // Only floating pharmacists can be put on the schedule.
+  const floaters = useMemo(
+    () => profiles.filter((p) => p.active && p.approved && p.is_floater),
     [profiles]
   );
 
@@ -528,6 +529,17 @@ export default function App() {
         </div>
       </header>
 
+      {isManager && floaters.length === 0 && (
+        <div className="form-card" style={{ marginBottom: 10, fontSize: 13 }}>
+          <div style={{ marginBottom: 8 }}>
+            Nobody is marked as a floating pharmacist yet, so there is no one to schedule.
+          </div>
+          <button className="btn ghost" onClick={() => setShowStaff(true)}>
+            Mark who floats
+          </button>
+        </div>
+      )}
+
       {isManager && pendingCount > 0 && (
         <div className="form-card" style={{ marginBottom: 10, fontSize: 13 }}>
           <div style={{ marginBottom: 8 }}>
@@ -623,15 +635,11 @@ export default function App() {
 
       {view === 'day' && (
         <DayView
-          dateKey={ymd(anchor)}
           shifts={shiftsByDate[ymd(anchor)] || []}
-          locations={
-            locationFilter === 'all' ? locations : locations.filter((l) => l.id === locationFilter)
-          }
+          locationsById={locationsById}
           profilesById={profilesById}
           isManager={isManager}
-          onEdit={() => setSelectedDate(ymd(anchor))}
-          onAdd={() => setSelectedDate(ymd(anchor))}
+          onOpenDay={() => setSelectedDate(ymd(anchor))}
         />
       )}
 
@@ -641,9 +649,7 @@ export default function App() {
           shiftsByDate={shiftsByDate}
           locationsById={locationsById}
           profilesById={profilesById}
-          locationCount={locations.length}
           onSelectDate={setSelectedDate}
-          showGaps={!mineOnly && locationFilter === 'all'}
         />
       )}
 
@@ -654,8 +660,6 @@ export default function App() {
           locationsById={locationsById}
           profilesById={profilesById}
           onSelectDate={setSelectedDate}
-          showGaps={!mineOnly && locationFilter === 'all'}
-          locationCount={locations.length}
         />
       )}
 
@@ -664,7 +668,7 @@ export default function App() {
           dateKey={selectedDate}
           shifts={shiftsByDate[selectedDate] || []}
           locations={locations}
-          profiles={activeProfiles}
+          profiles={floaters}
           isManager={isManager}
           offUserIds={offUserIds}
           saving={saving}
