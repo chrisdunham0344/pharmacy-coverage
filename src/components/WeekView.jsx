@@ -2,24 +2,28 @@ import { fmtTime, weekCells, ymd } from '../utils.js';
 
 export default function WeekView({
   anchor,
+  days = 7,
   shiftsByDate,
   locationsById,
   profilesById,
   onSelectDate,
 }) {
-  const cells = weekCells(anchor);
+  const cells = weekCells(anchor, days);
   const todayKey = ymd(new Date());
 
   return (
     <div>
-      {cells.map((cell) => {
+      {cells.map((cell, index) => {
         const list = shiftsByDate[cell.key] || [];
+
+        const startsSecondWeek = days > 7 && index === 7;
 
         return (
           <button
             className={`week-row${cell.key === todayKey ? ' today' : ''}`}
             key={cell.key}
             onClick={() => onSelectDate(cell.key)}
+            style={startsSecondWeek ? { marginTop: 14 } : undefined}
           >
             <span className="wd">
               {cell.date.toLocaleDateString(undefined, { weekday: 'short' })}
