@@ -1,16 +1,9 @@
 import { fmtTime } from '../utils.js';
-import { Plus } from './Icons.jsx';
 
 // Only floating pharmacists are scheduled, so a store with nobody listed is
 // normal — it simply has no floater that day. Nothing is flagged as missing.
 
-export default function DayView({
-  shifts,
-  locationsById,
-  profilesById,
-  isManager,
-  onOpenDay,
-}) {
+export default function DayView({ shifts, locationsById, profilesById, onOpenDay }) {
   const groups = [];
   for (const s of shifts) {
     let g = groups.find((x) => x.locationId === s.location_id);
@@ -34,13 +27,6 @@ export default function DayView({
             ? 'No floating pharmacist scheduled'
             : `${shifts.length} scheduled`}
         </span>
-        {isManager && (
-          <button className="chip-btn" onClick={onOpenDay}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 6 }}>
-              <Plus size={14} /> Add
-            </span>
-          </button>
-        )}
       </div>
 
       {groups.map((g) => (
