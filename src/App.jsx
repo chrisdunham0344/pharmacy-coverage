@@ -112,7 +112,7 @@ function SignIn() {
   return (
     <div className="signin-wrap">
       <div className="signin">
-        <h1>Pharmacist coverage</h1>
+        <h1 className="wordmark">Wo<span className="rx">Rx</span>shift</h1>
         <p>
           {mode === 'in'
             ? 'Sign in to see who is working where.'
@@ -712,9 +712,12 @@ export default function App() {
   return (
     <div className="app">
       <header className="topbar">
-        <div>
-          <h1>Pharmacist coverage</h1>
-          <div className="sub">{me.full_name}</div>
+        <div className="brand-line">
+          <span className="mark">Rx</span>
+          <div>
+            <h1>Wo<span style={{ color: 'var(--brand-green)' }}>Rx</span>shift</h1>
+            <div className="sub">{me.full_name}</div>
+          </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
           <button className="icon-btn" onClick={() => setShowTimeOff(true)} aria-label="Time off">
