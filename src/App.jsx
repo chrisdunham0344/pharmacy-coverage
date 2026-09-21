@@ -481,6 +481,7 @@ export default function App() {
   /* ---------- derived ---------- */
 
   const isManager = me?.role === 'manager';
+  const isFloater = Boolean(me?.is_floater);
 
   const locationsById = useMemo(
     () => Object.fromEntries(locations.map((l) => [l.id, l])),
@@ -720,9 +721,6 @@ export default function App() {
           </div>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button className="icon-btn" onClick={() => setShowTimeOff(true)} aria-label="Time off">
-            <CalendarIcon />
-          </button>
           {isManager && (
             <button
               className="icon-btn"
@@ -784,9 +782,11 @@ export default function App() {
       </div>
 
       <div className="toggle-row">
-        <button className={`chip-btn${mineOnly ? ' on' : ''}`} onClick={() => setMineOnly((v) => !v)}>
-          My shifts
-        </button>
+        {isFloater && (
+          <button className={`chip-btn${mineOnly ? ' on' : ''}`} onClick={() => setMineOnly((v) => !v)}>
+            My shifts
+          </button>
+        )}
         <button
           className={`chip-btn${locationFilter === 'all' ? ' on' : ''}`}
           onClick={() => setLocationFilter('all')}
@@ -847,6 +847,18 @@ export default function App() {
       {isManager && (
         <button className="btn ghost" style={{ marginBottom: 10 }} onClick={announceSchedule}>
           Tell everyone the schedule is posted
+        </button>
+      )}
+
+      {isFloater && (
+        <button className="btn ghost" style={{ marginBottom: 10 }} onClick={() => setShowTimeOff(true)}>
+          Request time off
+        </button>
+      )}
+
+      {isManager && (
+        <button className="btn ghost" style={{ marginBottom: 10 }} onClick={() => setShowTimeOff(true)}>
+          Time off requests
         </button>
       )}
 
