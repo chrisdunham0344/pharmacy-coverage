@@ -17,6 +17,7 @@ const STATUS_COLOR = {
 };
 
 export default function TimeOffPanel({ me, profilesById, isManager, onClose, onChanged }) {
+  const isFloater = Boolean(me && me.is_floater);
   const [requests, setRequests] = useState([]);
   const [loading, setLoading] = useState(true);
   const [busy, setBusy] = useState(false);
@@ -115,7 +116,7 @@ export default function TimeOffPanel({ me, profilesById, isManager, onClose, onC
     <div className="overlay" onClick={onClose}>
       <div className="sheet" onClick={(e) => e.stopPropagation()}>
         <div className="sheet-head">
-          <h2>Time off</h2>
+          <h2>{isFloater ? 'Request time off' : 'Time off requests'}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
             <Close />
           </button>
@@ -128,7 +129,7 @@ export default function TimeOffPanel({ me, profilesById, isManager, onClose, onC
             <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>
               Waiting on you
             </div>
-            {pending.length === 0 && <p className="empty">Nothing pending.</p>}
+            {pending.length === 0 && <p className="empty">Nothing waiting.</p>}
             {pending.map((r) => (
               <div className="shift-row" key={r.id} style={{ flexWrap: 'wrap' }}>
                 <div style={{ flex: 1, minWidth: 0 }}>
@@ -150,10 +151,37 @@ export default function TimeOffPanel({ me, profilesById, isManager, onClose, onC
                 </div>
               </div>
             ))}
+            {!isFloater && (
+              <>
+                <div style={{ fontSize: 13, color: 'var(--muted)', margin: '18px 0 8px' }}>
+                  Coming up
+                </div>
+                {requests.filter((r) => r.status !== 'pending').length === 0 && (
+                  <p className="empty">No approved or denied requests ahead.</p>
+                )}
+                {requests
+                  .filter((r) => r.status !== 'pending')
+                  .map((r) => (
+                    <div className="shift-row" key={r.id}>
+                      <span className="bar" style={{ background: STATUS_COLOR[r.status] }} />
+                      <div style={{ flex: 1, minWidth: 0 }}>
+                        <div className="who">
+                          {profilesById[r.user_id] ? profilesById[r.user_id].full_name : 'Someone'}
+                        </div>
+                        <div className="meta">
+                          {rangeLabel(r)} · {r.status}
+                        </div>
+                      </div>
+                    </div>
+                  ))}
+              </>
+            )}
             <div style={{ height: 18 }} />
           </>
         )}
 
+        {isFloater && (
+        <>
         <div style={{ fontSize: 13, color: 'var(--muted)', marginBottom: 8 }}>Your requests</div>
 
         {loading && <p className="empty">Loading…</p>}
@@ -221,6 +249,8 @@ export default function TimeOffPanel({ me, profilesById, isManager, onClose, onC
             {busy ? 'Sending…' : 'Send request'}
           </button>
         </div>
+        </>
+        )}
       </div>
     </div>
   );
