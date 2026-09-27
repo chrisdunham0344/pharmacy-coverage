@@ -13,6 +13,7 @@ export default function BulkSchedule({
   floaters,
   locations,
   shifts,
+  timeOff = [],
   onClose,
   onSave,
 }) {
@@ -43,6 +44,10 @@ export default function BulkSchedule({
       }
     }
     return next;
+  }
+
+  function isOff(id, key) {
+    return timeOff.some((t) => t.user_id === id && t.start_date <= key && t.end_date >= key);
   }
 
   function switchFloater(id) {
@@ -113,44 +118,47 @@ export default function BulkSchedule({
   }, [rows, dateKeys]);
 
   async function save() {
-    const inserts = [];
-    const updates = [];
-    const deletes = [];
+    const days = [];
+    let removals = 0;
+    let overTimeOff = 0;
 
     for (const key of dateKeys) {
       const row = rows[key];
       if (!row || row.locked) continue;
 
       if (!row.location_id) {
-        if (row.existingId) deletes.push(row.existingId);
+        if (row.existingId) removals++;
+        days.push({ date: key, location_id: null, start: '', end: '' });
         continue;
       }
 
       const start = row.start || defaultStart;
       const end = row.end || defaultEnd;
       if (end <= start) {
-        setError(`Check the times on ${key} — the end is not after the start.`);
+        setError(`Check the times on ${fromYmd(key).toLocaleDateString(undefined, { month: 'short', day: 'numeric' })} — the end has to be after the start.`);
         return;
       }
+      if (isOff(floaterId, key)) overTimeOff++;
+      days.push({ date: key, location_id: row.location_id, start, end });
+    }
 
-      const record = {
-        shift_date: key,
-        location_id: row.location_id,
-        pharmacist_id: floaterId,
-        start_time: start,
-        end_time: end,
-      };
-
-      if (row.existingId) updates.push({ id: row.existingId, ...record });
-      else inserts.push(record);
+    const warnings = [];
+    if (removals > 0) {
+      warnings.push(`remove ${removals} existing ${removals === 1 ? 'shift' : 'shifts'}`);
+    }
+    if (overTimeOff > 0) {
+      warnings.push(`schedule over ${overTimeOff} ${overTimeOff === 1 ? 'day' : 'days'} of approved time off`);
+    }
+    if (warnings.length > 0 && !window.confirm(`This will ${warnings.join(' and ')}. Continue?`)) {
+      return;
     }
 
     setError('');
     setBusy(true);
-    const ok = await onSave({ inserts, updates, deletes, floaterId });
+    const result = await onSave({ floaterId, days });
     setBusy(false);
-    if (ok) onClose();
-    else setError('Some of that did not save. Check your connection and try again.');
+    if (result === true) onClose();
+    else setError(typeof result === 'string' ? result : 'That did not save. Nothing was changed.');
   }
 
   if (floaters.length === 0) {
@@ -171,9 +179,15 @@ export default function BulkSchedule({
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Make schedule"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="sheet-head">
-          <h2>Build the schedule</h2>
+          <h2>Make schedule</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close"><Close /></button>
         </div>
 
@@ -239,6 +253,9 @@ export default function BulkSchedule({
                   {d.toLocaleDateString(undefined, { weekday: 'short' })}
                 </div>
                 <div style={{ fontWeight: 600 }}>{d.getDate()}</div>
+                {isOff(floaterId, key) && (
+                  <div style={{ fontSize: 11, color: 'var(--danger)', fontWeight: 600 }}>Time off</div>
+                )}
               </div>
 
               {row.locked ? (
@@ -290,7 +307,7 @@ export default function BulkSchedule({
             {summary} {summary === 1 ? 'day' : 'days'} scheduled in this period
           </div>
           <button className="btn" onClick={save} disabled={busy}>
-            {busy ? 'Saving…' : 'Save the whole period'}
+            {busy ? 'Saving…' : 'Save these two weeks'}
           </button>
         </div>
       </div>
