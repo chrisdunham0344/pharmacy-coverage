@@ -20,7 +20,7 @@ React 18 and Vite 5, hosted on Vercel. Supabase for login, the Postgres database
 
 ```
 index.html                     page shell, icons, manifest link
-public/sw.js                   service worker: shows notifications
+public/sw.js                   service worker: receives and shows notifications
 public/manifest.webmanifest    home-screen install settings
 public/icon-*.png              app icons
 src/main.jsx                   startup and crash screen
@@ -99,5 +99,7 @@ The Supabase service-role key is never used by the app. The Edge Function receiv
 
 ## Not yet done
 
-- No automated tests, lint, or lockfile. Add `package-lock.json` by running `npm install` once on any machine and committing the result.
-- Push notifications have not been tested on a real device.
+- No automated tests or lint yet.
+- No `package-lock.json` yet; add it by running `npm install` and committing the result.
+- Push notifications still need real-device verification on iPhone and Android.
+- Apply `supabase/schema.sql` to the live Supabase project after schema changes.
