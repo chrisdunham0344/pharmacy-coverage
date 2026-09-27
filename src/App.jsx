@@ -11,14 +11,17 @@ import BulkSchedule from './components/BulkSchedule.jsx';
 import {
   addDays,
   dayTitle,
+  friendlyError,
   fromYmd,
   monthLabel,
   monthRange,
   weekStart,
+  shiftLine,
   weekTitle,
   ymd,
 } from './utils.js';
 import {
+  disablePush,
   enablePush,
   isIosSafariNotInstalled,
   pushPermission,
@@ -26,6 +29,13 @@ import {
   registerServiceWorker,
   sendPush,
 } from './push.js';
+
+// Stops this device receiving the signed-out person's notifications, then
+// signs out. Used everywhere a sign-out button appears.
+async function signOutEverywhere() {
+  await disablePush();
+  await supabase.auth.signOut();
+}
 
 /* ------------------------------------------------------------------ */
 /* Sign in and sign up                                                 */
@@ -286,9 +296,40 @@ function PendingApproval({ name }) {
           {name ? `${name}, your` : 'Your'} account is set up. A manager has to approve it before
           the schedule appears. You will not need to do anything else — just sign in again later.
         </p>
-        <button className="btn ghost" onClick={() => supabase.auth.signOut()}>
+        <button className="btn ghost" onClick={signOutEverywhere}>
           Sign out
         </button>
+      </div>
+    </div>
+  );
+}
+
+/* ------------------------------------------------------------------ */
+/* Could not load the account (network) and deactivated accounts       */
+/* ------------------------------------------------------------------ */
+
+function LoadFailed({ onRetry }) {
+  return (
+    <div className="signin-wrap">
+      <div className="signin">
+        <h1>Could not connect</h1>
+        <p>WoRxshift could not reach the server. Check your internet connection and try again.</p>
+        <button className="btn" onClick={onRetry}>Try again</button>
+        <button className="btn ghost" style={{ marginTop: 8 }} onClick={signOutEverywhere}>
+          Sign out
+        </button>
+      </div>
+    </div>
+  );
+}
+
+function Deactivated() {
+  return (
+    <div className="signin-wrap">
+      <div className="signin">
+        <h1>Account turned off</h1>
+        <p>A manager has turned off this account. If that is a mistake, ask your manager to turn it back on.</p>
+        <button className="btn ghost" onClick={signOutEverywhere}>Sign out</button>
       </div>
     </div>
   );
@@ -323,6 +364,7 @@ export default function App() {
 
   const [me, setMe] = useState(null);
   const [meLoaded, setMeLoaded] = useState(false);
+  const [coreFailed, setCoreFailed] = useState(false);
   const [locations, setLocations] = useState([]);
   const [profiles, setProfiles] = useState([]);
   const [shifts, setShifts] = useState([]);
@@ -337,6 +379,7 @@ export default function App() {
   const [showTimeOff, setShowTimeOff] = useState(false);
   const [showBulk, setShowBulk] = useState(false);
   const [bulkShifts, setBulkShifts] = useState([]);
+  const [bulkTimeOff, setBulkTimeOff] = useState([]);
   const [bulkKeys, setBulkKeys] = useState([]);
   const [bulkBusy, setBulkBusy] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -383,17 +426,24 @@ export default function App() {
   const loadCore = useCallback(async () => {
     if (!session) return;
 
-    const { data: meRow } = await supabase
+    const { data: meRow, error: meErr } = await supabase
       .from('profiles')
       .select('*')
       .eq('id', session.user.id)
       .maybeSingle();
 
+    if (meErr) {
+      setCoreFailed(true);
+      setMeLoaded(true);
+      return;
+    }
+
+    setCoreFailed(false);
     setMe(meRow);
     setMeLoaded(true);
 
-    // An unapproved account can read nothing else, so stop here.
-    if (!meRow || !meRow.approved) return;
+    // An unapproved or turned-off account can read nothing else, so stop here.
+    if (!meRow || !meRow.approved || !meRow.active) return;
 
     const [locRes, profRes] = await Promise.all([
       supabase.from('locations').select('*').eq('active', true).order('sort_order'),
@@ -412,6 +462,20 @@ export default function App() {
   useEffect(() => {
     loadCore();
   }, [loadCore]);
+
+  /* ---------- Escape closes whatever sheet is open ---------- */
+
+  useEffect(() => {
+    function onKey(e) {
+      if (e.key !== 'Escape') return;
+      setSelectedDate(null);
+      setShowBulk(false);
+      setShowStaff(false);
+      setShowTimeOff(false);
+    }
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, []);
 
   /* ---------- notifications ---------- */
 
@@ -465,12 +529,16 @@ export default function App() {
     setLoadError('');
     setShifts(data || []);
 
-    const { data: off } = await supabase
+    const { data: off, error: offErr } = await supabase
       .from('time_off')
-      .select('*')
+      .select('id, user_id, start_date, end_date, status')
       .eq('status', 'approved')
       .lte('start_date', range.to)
       .gte('end_date', range.from);
+    if (offErr) {
+      setLoadError('Time off could not load, so conflict warnings may be missing. Try again shortly.');
+      return;
+    }
     setTimeOff(off || []);
   }, [session, me, range.from, range.to]);
 
@@ -550,15 +618,21 @@ export default function App() {
       start_time: shift.start_time,
       end_time: shift.end_time,
       notes: shift.notes,
-      created_by: session.user.id,
     };
-    const query = shift.id
-      ? supabase.from('shifts').update(payload).eq('id', shift.id)
-      : supabase.from('shifts').insert(payload);
 
-    const { error } = await query;
+    // .select() so an edit to a shift someone else already deleted is caught
+    // instead of quietly "succeeding" with zero rows changed.
+    const query = shift.id
+      ? supabase.from('shifts').update(payload).eq('id', shift.id).select('id')
+      : supabase.from('shifts').insert(payload).select('id');
+
+    const { data, error } = await query;
     setSaving(false);
-    if (error) return false;
+    if (error) return friendlyError(error);
+    if (!data || data.length === 0) {
+      await loadShifts();
+      return 'That shift was removed by someone else. The day has been refreshed.';
+    }
     await loadShifts();
 
     if (shift.pharmacist_id) {
@@ -566,7 +640,7 @@ export default function App() {
       sendPush({
         userIds: [shift.pharmacist_id],
         title: shift.id ? 'Your shift changed' : 'New shift assigned',
-        body: `${loc ? loc.name : 'A store'} on ${shift.shift_date}, ${shift.start_time}–${shift.end_time}`,
+        body: `${loc ? loc.name : 'A store'} · ${shiftLine(shift.shift_date, shift.start_time, shift.end_time)}`,
       });
     }
     return true;
@@ -581,60 +655,57 @@ export default function App() {
     const keys = [];
     for (let i = 0; i < 14; i++) keys.push(ymd(addDays(start, i)));
 
-    const { data, error } = await supabase
-      .from('shifts')
-      .select('*')
-      .gte('shift_date', keys[0])
-      .lte('shift_date', keys[13]);
+    const [shiftRes, offRes] = await Promise.all([
+      supabase.from('shifts').select('*').gte('shift_date', keys[0]).lte('shift_date', keys[13]),
+      supabase
+        .from('time_off')
+        .select('id, user_id, start_date, end_date, status')
+        .eq('status', 'approved')
+        .lte('start_date', keys[13])
+        .gte('end_date', keys[0]),
+    ]);
 
     setBulkBusy(false);
 
-    if (error) {
+    if (shiftRes.error || offRes.error) {
       setNotice('The schedule could not load. Check your connection and try again.');
       return;
     }
 
     setBulkKeys(keys);
-    setBulkShifts(data || []);
+    setBulkShifts(shiftRes.data || []);
+    setBulkTimeOff(offRes.data || []);
     setShowBulk(true);
   }
 
-  // Writes a whole period in one go, then tells that pharmacist once.
-  async function saveBulk({ inserts, updates, deletes, floaterId }) {
-    try {
-      if (deletes.length > 0) {
-        const { error } = await supabase.from('shifts').delete().in('id', deletes);
-        if (error) return false;
-      }
-
-      if (inserts.length > 0) {
-        const { error } = await supabase
-          .from('shifts')
-          .insert(inserts.map((r) => ({ ...r, created_by: session.user.id })));
-        if (error) return false;
-      }
-
-      for (const u of updates) {
-        const { id, ...rest } = u;
-        const { error } = await supabase.from('shifts').update(rest).eq('id', id);
-        if (error) return false;
-      }
-
-      await loadShifts();
-
-      if (inserts.length + updates.length + deletes.length > 0) {
-        sendPush({
-          userIds: [floaterId],
-          title: 'Your schedule was updated',
-          body: `Your shifts for ${weekTitle(anchor, 14)} have changed. Open the app to see them.`,
-        });
-      }
-      setNotice('Schedule saved.');
+  // One database call for the whole fortnight. The database applies every day
+  // or none of them, so a dropped connection cannot leave half a schedule.
+  async function saveBulk({ floaterId, days }) {
+    if (!days || days.length === 0) {
+      setNotice('No changes to save.');
       return true;
-    } catch (err) {
-      console.error(err);
-      return false;
     }
+
+    const { data: changed, error } = await supabase.rpc('save_schedule_period', {
+      p_pharmacist: floaterId,
+      p_days: days,
+    });
+
+    if (error) return friendlyError(error, 'That did not save. Nothing was changed. Try again.');
+
+    await loadShifts();
+
+    if (changed > 0) {
+      sendPush({
+        userIds: [floaterId],
+        title: 'Your schedule was updated',
+        body: `Your shifts for ${weekTitle(fromYmd(days[0].date), 14)} have changed. Open the app to see them.`,
+      });
+      setNotice('Schedule saved.');
+    } else {
+      setNotice('No changes to save.');
+    }
+    return true;
   }
 
   // Tells everyone — including the seven store pharmacists, who are not on the
@@ -652,7 +723,9 @@ export default function App() {
 
   async function deleteShift(id) {
     const { error } = await supabase.from('shifts').delete().eq('id', id);
-    if (!error) await loadShifts();
+    if (error) return friendlyError(error, 'That did not delete. Try again.');
+    await loadShifts();
+    return true;
   }
 
   async function saveProfile(p) {
@@ -664,9 +737,10 @@ export default function App() {
         role: p.role,
         active: p.active,
         approved: p.approved,
+        is_floater: Boolean(p.is_floater),
       })
       .eq('id', p.id);
-    if (error) return false;
+    if (error) return friendlyError(error);
     await loadCore();
     return true;
   }
@@ -708,7 +782,9 @@ export default function App() {
 
   if (!session) return <SignIn />;
   if (!meLoaded) return <div className="app"><p className="empty">Loading…</p></div>;
+  if (coreFailed) return <LoadFailed onRetry={loadCore} />;
   if (!me || !me.approved) return <PendingApproval name={me ? me.full_name : ''} />;
+  if (!me.active) return <Deactivated />;
 
   return (
     <div className="app">
@@ -731,7 +807,7 @@ export default function App() {
               <Users />
             </button>
           )}
-          <button className="icon-btn" onClick={() => supabase.auth.signOut()} aria-label="Sign out">
+          <button className="icon-btn" onClick={signOutEverywhere} aria-label="Sign out">
             <LogOut />
           </button>
         </div>
@@ -898,6 +974,7 @@ export default function App() {
           shifts={shiftsByDate[selectedDate] || []}
           locations={locations}
           profiles={floaters}
+          profilesById={profilesById}
           isManager={isManager}
           offUserIds={offUserIds}
           saving={saving}
@@ -913,6 +990,7 @@ export default function App() {
           floaters={floaters}
           locations={locations}
           shifts={bulkShifts}
+          timeOff={bulkTimeOff}
           onClose={() => setShowBulk(false)}
           onSave={saveBulk}
         />
