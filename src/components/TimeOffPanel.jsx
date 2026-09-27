@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import { supabase } from '../supabaseClient.js';
 import { sendPush } from '../push.js';
 import { Close, Trash } from './Icons.jsx';
-import { longDate, ymd } from '../utils.js';
+import { friendlyError, longDate, ymd } from '../utils.js';
 
 function rangeLabel(r) {
   return r.start_date === r.end_date
@@ -29,16 +29,23 @@ export default function TimeOffPanel({ me, profilesById, isManager, onClose, onC
     setLoading(true);
     const { data, error: err } = await supabase
       .from('time_off')
-      .select('*')
+      .select('*, time_off_notes(note)')
       .gte('end_date', today)
       .order('start_date');
     setLoading(false);
     if (err) {
-      setError('Requests could not load.');
+      setError(friendlyError(err, 'Requests could not load. Check your connection.'));
       return;
     }
     setError('');
-    setRequests(data || []);
+    setRequests(
+      (data || []).map((r) => ({
+        ...r,
+        note: Array.isArray(r.time_off_notes)
+          ? r.time_off_notes[0]?.note || ''
+          : r.time_off_notes?.note || '',
+      }))
+    );
   }
 
   useEffect(() => {
@@ -51,29 +58,22 @@ export default function TimeOffPanel({ me, profilesById, isManager, onClose, onC
     if (form.end_date < form.start_date) return setError('The end date is before the start date.');
 
     setBusy(true);
-    const { error: err } = await supabase.from('time_off').insert({
-      user_id: me.id,
-      start_date: form.start_date,
-      end_date: form.end_date,
-      note: form.note.trim() || null,
-      status: 'pending',
+    const { error: err } = await supabase.rpc('request_time_off', {
+      p_start: form.start_date,
+      p_end: form.end_date,
+      p_note: form.note.trim() || null,
     });
     setBusy(false);
 
     if (err) {
-      setError('That did not save. Try again.');
+      setError(friendlyError(err));
       return;
     }
 
     setError('');
     setForm({ start_date: today, end_date: today, note: '' });
-    sendPush({
-      kind: 'timeoff_request',
-      dates:
-        form.start_date === form.end_date
-          ? form.start_date
-          : `${form.start_date} to ${form.end_date}`,
-    });
+    // The server writes the wording and dates from the saved request.
+    sendPush({ kind: 'timeoff_request' });
     await load();
     if (onChanged) onChanged();
   }
@@ -87,7 +87,7 @@ export default function TimeOffPanel({ me, profilesById, isManager, onClose, onC
     setBusy(false);
 
     if (err) {
-      setError('That did not save. Try again.');
+      setError(friendlyError(err));
       return;
     }
 
@@ -103,8 +103,25 @@ export default function TimeOffPanel({ me, profilesById, isManager, onClose, onC
   async function withdraw(request) {
     if (!window.confirm('Withdraw this request?')) return;
     setBusy(true);
-    await supabase.from('time_off').delete().eq('id', request.id);
+    const { data, error: err } = await supabase
+      .from('time_off')
+      .delete()
+      .eq('id', request.id)
+      .select('id');
     setBusy(false);
+
+    if (err) {
+      setError(friendlyError(err, 'That did not withdraw. Try again.'));
+      return;
+    }
+    if (!data || data.length === 0) {
+      // Nothing deleted: a manager decided it in the meantime.
+      setError('A manager already answered this request, so it can no longer be withdrawn.');
+      await load();
+      return;
+    }
+
+    setError('');
     await load();
     if (onChanged) onChanged();
   }
@@ -114,7 +131,13 @@ export default function TimeOffPanel({ me, profilesById, isManager, onClose, onC
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label={isFloater ? 'Request time off' : 'Time off requests'}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="sheet-head">
           <h2>{isFloater ? 'Request time off' : 'Time off requests'}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
