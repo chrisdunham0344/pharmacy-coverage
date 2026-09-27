@@ -346,7 +346,8 @@ drop policy if exists time_off_read       on public.time_off;
 drop policy if exists time_off_insert_own on public.time_off;
 drop policy if exists time_off_delete_own on public.time_off;
 drop policy if exists time_off_manage     on public.time_off;
-create policy time_off_read on public.time_off for select to authenticated using (public.is_approved());
+create policy time_off_read on public.time_off for select to authenticated
+  using (public.is_approved() and (public.is_manager() or user_id = auth.uid()));
 create policy time_off_insert_own on public.time_off for insert to authenticated
   with check (
     user_id = auth.uid() and status = 'pending' and public.is_approved()
