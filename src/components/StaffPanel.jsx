@@ -20,11 +20,11 @@ export default function StaffPanel({ profiles, onClose, onSave }) {
       is_floater: editing.is_floater,
     });
     setBusy(false);
-    if (ok) {
+    if (ok === true) {
       setEditing(null);
       setError('');
     } else {
-      setError('That did not save. Try again.');
+      setError(typeof ok === 'string' ? ok : 'That did not save. Try again.');
     }
   }
 
@@ -40,7 +40,8 @@ export default function StaffPanel({ profiles, onClose, onSave }) {
       is_floater: p.is_floater,
     });
     setBusy(false);
-    if (!ok) setError('That did not save. Try again.');
+    if (ok !== true) setError(typeof ok === 'string' ? ok : 'That did not save. Try again.');
+    else setError('');
   }
 
   const pending = profiles.filter((p) => !p.approved);
@@ -48,7 +49,13 @@ export default function StaffPanel({ profiles, onClose, onSave }) {
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label="Pharmacists"
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="sheet-head">
           <h2>Pharmacists</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
@@ -60,6 +67,8 @@ export default function StaffPanel({ profiles, onClose, onSave }) {
           Pharmacists sign up with their work email. Approve them here before they can see the
           schedule.
         </p>
+
+        {!editing && error && <div className="error" style={{ marginBottom: 10 }}>{error}</div>}
 
         {pending.length > 0 && (
           <>
