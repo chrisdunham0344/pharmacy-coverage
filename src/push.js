@@ -85,12 +85,31 @@ export async function enablePush(userId) {
   return { ok: true };
 }
 
-// Fires a notification through the edge function. Managers only — the function
-// checks that server-side too, so this is convenience, not security.
-export async function sendPush({ userIds, title, body, kind, dates }) {
+// Called at sign-out, so a shared pharmacy computer stops getting the previous
+// person's notifications. Best effort: sign-out continues even if this fails.
+export async function disablePush() {
+  if (!pushSupported()) return;
+  try {
+    const registration = await navigator.serviceWorker.getRegistration('/sw.js');
+    if (!registration) return;
+    const sub = await registration.pushManager.getSubscription();
+    if (!sub) return;
+
+    const endpoint = sub.endpoint;
+    const { error } = await supabase.from('push_subscriptions').delete().eq('endpoint', endpoint);
+    if (error) console.error('Could not remove push subscription', error);
+    await sub.unsubscribe();
+  } catch (err) {
+    console.error('Push unsubscribe failed', err);
+  }
+}
+
+// Fires a notification through the edge function. The function checks who is
+// allowed to send what, so this is convenience, not security.
+export async function sendPush({ userIds, title, body, kind }) {
   try {
     const { data, error } = await supabase.functions.invoke('send-push', {
-      body: { user_ids: userIds, title, body, kind, dates },
+      body: { user_ids: userIds, title, body, kind },
     });
     if (error) {
       console.error('send-push failed', error);
