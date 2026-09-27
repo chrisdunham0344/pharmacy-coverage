@@ -96,3 +96,34 @@ export function initialsFrom(name) {
   if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
   return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
 }
+
+// Turns database and network errors into something a pharmacist can act on.
+// The database now enforces the scheduling rules, so these messages are what
+// people actually see when a rule is broken.
+export function friendlyError(err, fallback = 'That did not save. Check your connection and try again.') {
+  const msg = String((err && (err.message || err.details)) || err || '');
+
+  if (msg.includes('shifts_end_after_start')) return 'The end time has to be after the start time.';
+  if (msg.includes('shifts_no_overlap')) return 'That overlaps another shift for the same pharmacist.';
+  if (msg.includes('SHIFT_ASSIGNEE_NOT_SCHEDULABLE'))
+    return 'That person cannot be scheduled. They need to be approved, active, and marked as a floater.';
+  if (msg.includes('SCHEDULE_CHANGED_ELSEWHERE'))
+    return 'Someone else changed this schedule while you were editing. Close this and open Make schedule again.';
+  if (msg.includes('LAST_MANAGER')) return 'There has to be at least one manager. Make someone else a manager first.';
+  if (msg.includes('NOT_MANAGER')) return 'Only a manager can do that.';
+  if (msg.includes('NOT_A_FLOATER')) return 'Only floating pharmacists can request time off.';
+  if (msg.includes('time_off_dates')) return 'The last day cannot be before the first day.';
+  if (msg.toLowerCase().includes('failed to fetch') || msg.toLowerCase().includes('network'))
+    return 'No connection. Check your internet and try again.';
+  return fallback;
+}
+
+// '2026-09-27', '09:00:00', '18:00:00' -> 'Sun, Sep 27, 9a–6p'
+export function shiftLine(dateStr, start, end) {
+  const d = fromYmd(dateStr).toLocaleDateString(undefined, {
+    weekday: 'short',
+    month: 'short',
+    day: 'numeric',
+  });
+  return `${d}, ${fmtTime(start)}–${fmtTime(end)}`;
+}
