@@ -1,21 +1,16 @@
 import { useState } from 'react';
-import { Close, Plus, Trash, Pencil } from './Icons.jsx';
+import { Close, Trash, Pencil } from './Icons.jsx';
 import { fmtTime, longDate } from '../utils.js';
 
-const BLANK = {
-  id: null,
-  location_id: '',
-  pharmacist_id: '',
-  start_time: '09:00',
-  end_time: '18:00',
-  notes: '',
-};
+// Tapping a day opens this. Managers can fix or remove an existing shift here —
+// a call-out, a time change. New schedules are made only through Make schedule.
 
 export default function DaySheet({
   dateKey,
   shifts,
   locations,
   profiles,
+  profilesById,
   isManager,
   offUserIds,
   saving,
@@ -28,12 +23,6 @@ export default function DaySheet({
 
   const off = offUserIds || new Set();
   const locationsById = Object.fromEntries(locations.map((l) => [l.id, l]));
-  const profilesById = Object.fromEntries(profiles.map((p) => [p.id, p]));
-
-  function openNew() {
-    setError('');
-    setForm({ ...BLANK, location_id: locations[0] ? locations[0].id : '' });
-  }
 
   function openEdit(shift) {
     setError('');
@@ -41,17 +30,19 @@ export default function DaySheet({
       id: shift.id,
       location_id: shift.location_id,
       pharmacist_id: shift.pharmacist_id || '',
-      start_time: (shift.start_time || '09:00').slice(0, 5),
-      end_time: (shift.end_time || '18:00').slice(0, 5),
+      start_time: String(shift.start_time || '09:00').slice(0, 5),
+      end_time: String(shift.end_time || '18:00').slice(0, 5),
       notes: shift.notes || '',
     });
   }
 
   async function submit() {
-    if (!form.location_id) return setError('Pick a location.');
+    if (!form.location_id) return setError('Pick a store.');
     if (!form.start_time || !form.end_time) return setError('Enter a start and end time.');
+    if (form.end_time <= form.start_time) return setError('The end time has to be after the start time.');
+
     setError('');
-    const ok = await onSave({
+    const result = await onSave({
       id: form.id,
       shift_date: dateKey,
       location_id: form.location_id,
@@ -60,22 +51,42 @@ export default function DaySheet({
       end_time: form.end_time,
       notes: form.notes.trim() || null,
     });
-    if (ok) setForm(null);
-    else setError('That did not save. Check your connection and try again.');
+
+    if (result === true) setForm(null);
+    else setError(typeof result === 'string' ? result : 'That did not save. Try again.');
+  }
+
+  async function remove(shift) {
+    if (!window.confirm('Remove this shift?')) return;
+    setError('');
+    const result = await onDelete(shift.id);
+    if (result !== true) setError(typeof result === 'string' ? result : 'That did not delete. Try again.');
+  }
+
+  // The person on a shift may no longer be a floater; keep them selectable so
+  // the dropdown shows the truth instead of silently reading "Not assigned".
+  const people = [...profiles];
+  if (form && form.pharmacist_id && !people.some((p) => p.id === form.pharmacist_id)) {
+    const current = profilesById[form.pharmacist_id];
+    if (current) people.push({ ...current, full_name: `${current.full_name} (not a floater)` });
   }
 
   const sorted = [...shifts].sort((a, b) => {
-    const la = locationsById[a.location_id];
-    const lb = locationsById[b.location_id];
-    const oa = la ? la.sort_order : 99;
-    const ob = lb ? lb.sort_order : 99;
+    const oa = locationsById[a.location_id]?.sort_order ?? 99;
+    const ob = locationsById[b.location_id]?.sort_order ?? 99;
     if (oa !== ob) return oa - ob;
     return String(a.start_time).localeCompare(String(b.start_time));
   });
 
   return (
     <div className="overlay" onClick={onClose}>
-      <div className="sheet" onClick={(e) => e.stopPropagation()}>
+      <div
+        className="sheet"
+        role="dialog"
+        aria-modal="true"
+        aria-label={longDate(dateKey)}
+        onClick={(e) => e.stopPropagation()}
+      >
         <div className="sheet-head">
           <h2>{longDate(dateKey)}</h2>
           <button className="icon-btn" onClick={onClose} aria-label="Close">
@@ -83,8 +94,11 @@ export default function DaySheet({
           </button>
         </div>
 
-        {sorted.length === 0 && !form && (
-          <p className="empty">No one is scheduled yet.</p>
+        {sorted.length === 0 && (
+          <p className="empty">
+            No floating pharmacist scheduled.
+            {isManager ? ' Use Make schedule to add one.' : ''}
+          </p>
         )}
 
         {sorted.map((s) => {
@@ -92,9 +106,9 @@ export default function DaySheet({
           const person = s.pharmacist_id ? profilesById[s.pharmacist_id] : null;
           return (
             <div className="shift-row" key={s.id}>
-              <span className="bar" style={{ background: loc ? loc.color : '#556' }} />
+              <span className="bar" style={{ background: loc ? loc.color : '#94a3b8' }} />
               <div style={{ flex: 1, minWidth: 0 }}>
-                <div className="who">{person ? person.full_name : 'Open shift'}</div>
+                <div className="who">{person ? person.full_name : 'Not assigned'}</div>
                 <div className="meta">
                   {loc ? loc.name : 'Unknown store'} · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}
                   {s.notes ? ` · ${s.notes}` : ''}
@@ -110,13 +124,7 @@ export default function DaySheet({
                   <button className="icon-btn" onClick={() => openEdit(s)} aria-label="Edit shift">
                     <Pencil size={16} />
                   </button>
-                  <button
-                    className="icon-btn"
-                    onClick={() => {
-                      if (window.confirm('Remove this shift?')) onDelete(s.id);
-                    }}
-                    aria-label="Remove shift"
-                  >
+                  <button className="icon-btn" onClick={() => remove(s)} aria-label="Remove shift">
                     <Trash size={16} />
                   </button>
                 </>
@@ -125,18 +133,12 @@ export default function DaySheet({
           );
         })}
 
-        {isManager && !form && (
-          <button className="btn ghost" onClick={openNew} style={{ marginTop: 10 }}>
-            <span style={{ display: 'inline-flex', alignItems: 'center', gap: 8 }}>
-              <Plus size={16} /> Add a shift
-            </span>
-          </button>
-        )}
+        {!form && error && <div className="error">{error}</div>}
 
         {isManager && form && (
           <div className="form-card">
             <div className="field">
-              <label htmlFor="loc">Location</label>
+              <label htmlFor="loc">Store</label>
               <select
                 id="loc"
                 value={form.location_id}
@@ -155,8 +157,8 @@ export default function DaySheet({
                 value={form.pharmacist_id}
                 onChange={(e) => setForm({ ...form, pharmacist_id: e.target.value })}
               >
-                <option value="">Leave open</option>
-                {profiles.map((p) => (
+                <option value="">Not assigned</option>
+                {people.map((p) => (
                   <option key={p.id} value={p.id}>{p.full_name}</option>
                 ))}
               </select>
@@ -196,8 +198,7 @@ export default function DaySheet({
 
             {form.pharmacist_id && off.has(form.pharmacist_id) && (
               <div className="error">
-                Heads up: this pharmacist has approved time off on this day. You can still
-                schedule them.
+                Heads up: this pharmacist has approved time off on this day. You can still save.
               </div>
             )}
 
@@ -206,7 +207,7 @@ export default function DaySheet({
             <div className="row-2" style={{ marginTop: 10 }}>
               <button className="btn ghost" onClick={() => setForm(null)}>Cancel</button>
               <button className="btn" onClick={submit} disabled={saving}>
-                {saving ? 'Saving…' : 'Save shift'}
+                {saving ? 'Saving…' : 'Save changes'}
               </button>
             </div>
           </div>
