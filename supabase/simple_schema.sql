@@ -108,11 +108,6 @@ using (auth_user_id = auth.uid());
 create policy simple_push_write on public.simple_push_subscriptions for all to authenticated
 using (auth_user_id = auth.uid()) with check (auth_user_id = auth.uid());
 
-insert into public.simple_people (name, is_manager)
-select 'Manager', true
-where not exists (select 1 from public.simple_people);
-
-
 create or replace function public.simple_shifts_before_write()
 returns trigger language plpgsql security definer set search_path=public as $$
 declare current_person uuid := public.simple_current_person();
