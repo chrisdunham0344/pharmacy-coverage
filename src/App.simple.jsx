@@ -3,11 +3,7 @@ import { supabase } from './supabaseClient.js';
 import { enablePush, pushPermission, registerServiceWorker, sendPush } from './push.js';
 import { ymd, fromYmd, fmtTime, longDate } from './utils.js';
 
-const LOCATIONS = [
-  { id: 'beebe', name: 'Beebe Drug' },
-  { id: 'vilonia', name: 'Vilonia Family Pharmacy' },
-  { id: 'amity', name: 'Amity Road Pharmacy' },
-];
+const LOCATIONS = [];
 
 function Login({ onLogin }) {
   const [name, setName] = useState('');
@@ -39,9 +35,9 @@ function Login({ onLogin }) {
   </form></div>;
 }
 
-function ScheduleForm({ people, onClose, onSaved }) {
+function ScheduleForm({ people, locations, onClose, onSaved }) {
   const [personId,setPersonId]=useState(people[0]?.id||'');
-  const [locationId,setLocationId]=useState(LOCATIONS[0].id);
+  const [locationId,setLocationId]=useState('');
   const [date,setDate]=useState(ymd(new Date()));
   const [start,setStart]=useState('09:00');
   const [end,setEnd]=useState('17:00');
@@ -49,21 +45,20 @@ function ScheduleForm({ people, onClose, onSaved }) {
   async function save(e){
     e.preventDefault(); setBusy(true); setError('');
     const {data:{user}}=await supabase.auth.getUser();
+    if(!locationId){setError('Choose a store.');setBusy(false);return;}
     const {data,error}=await supabase.from('simple_shifts').insert({
       shift_date:date, location_id:locationId, person_id:personId,
       start_time:start, end_time:end, created_by:personId
     }).select().single();
     if(error){setError(error.message.includes('simple_shift_no_overlap')?'That overlaps an existing shift.':'Could not save that shift.');setBusy(false);return;}
-    const {data: sessions}=await supabase.from('simple_sessions').select('auth_user_id,person_id');
-    const recipients=(sessions||[]).filter(x=>x.auth_user_id!==user?.id).map(x=>x.auth_user_id);
     const p=people.find(x=>x.id===personId);
-    await sendPush({userIds:recipients,title:'WoRxshift',body:`${p?.name||'Someone'} is scheduled at ${LOCATIONS.find(x=>x.id===locationId)?.name} on ${longDate(date)} ${fmtTime(start)}–${fmtTime(end)}.`,kind:'schedule'});
+    await sendPush({title:'WoRxshift',body:`${p?.name||'Someone'} is scheduled at ${locations.find(x=>x.id===locationId)?.name} on ${longDate(date)} ${fmtTime(start)}–${fmtTime(end)}.`,kind:'schedule'});
     setBusy(false); onSaved(data); onClose();
   }
   return <div className="overlay"><form className="sheet" onSubmit={save}>
     <div className="sheet-head"><h2>Add schedule</h2><button type="button" className="icon-btn" onClick={onClose}>×</button></div>
     <div className="field"><label>Employee</label><select value={personId} onChange={e=>setPersonId(e.target.value)}>{people.filter(p=>p.active).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-    <div className="field"><label>Store</label><select value={locationId} onChange={e=>setLocationId(e.target.value)}>{LOCATIONS.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
+    <div className="field"><label>Store</label><select value={locationId} onChange={e=>setLocationId(e.target.value)}>{locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
     <div className="field"><label>Date</label><input type="date" value={date} onChange={e=>setDate(e.target.value)} /></div>
     <div className="row-2"><div className="field"><label>Start</label><input type="time" value={start} onChange={e=>setStart(e.target.value)} /></div><div className="field"><label>End</label><input type="time" value={end} onChange={e=>setEnd(e.target.value)} /></div></div>
     {error&&<div className="error">{error}</div>}<button className="btn" disabled={busy}>{busy?'Saving…':'Save schedule'}</button>
@@ -78,9 +73,7 @@ function TimeOffForm({ me, onClose, onSaved }) {
     const {data:{user}}=await supabase.auth.getUser();
     const {data,error}=await supabase.from('simple_time_off').insert({person_id:me.id,start_date:start,end_date:end,note}).select().single();
     if(error){setError('Could not submit the request.');setBusy(false);return;}
-    const {data:sessions}=await supabase.from('simple_sessions').select('auth_user_id');
-    const recipients=(sessions||[]).filter(x=>x.auth_user_id!==user?.id).map(x=>x.auth_user_id);
-    await sendPush({userIds:recipients,title:'WoRxshift',body:`${me.name} requested time off: ${longDate(start)} through ${longDate(end)}.`,kind:'time_off'});
+    await sendPush({title:'WoRxshift',body:`${me.name} requested time off: ${longDate(start)} through ${longDate(end)}.`,kind:'time_off'});
     setBusy(false); onSaved(data); onClose();
   }
   return <div className="overlay"><form className="sheet" onSubmit={save}>
@@ -93,19 +86,20 @@ function TimeOffForm({ me, onClose, onSaved }) {
 }
 
 export default function App(){
-  const [me,setMe]=useState(null); const [people,setPeople]=useState([]); const [shifts,setShifts]=useState([]); const [timeOff,setTimeOff]=useState([]);
+  const [me,setMe]=useState(null); const [people,setPeople]=useState([]); const [locations,setLocations]=useState([]); const [shifts,setShifts]=useState([]); const [timeOff,setTimeOff]=useState([]);
   const [week,setWeek]=useState(()=>new Date()); const [modal,setModal]=useState(null); const [notice,setNotice]=useState('');
   const [push,setPush]=useState('default');
   const start=new Date(week.getFullYear(),week.getMonth(),week.getDate()-week.getDay());
   const days=Array.from({length:7},(_,i)=>new Date(start.getFullYear(),start.getMonth(),start.getDate()+i));
   const from=ymd(days[0]), to=ymd(days[6]);
   async function load(){
-    const [{data:p},{data:s},{data:t}]=await Promise.all([
+    const [{data:p},{data:l},{data:s},{data:t}]=await Promise.all([
       supabase.from('simple_people').select('*').eq('active',true).order('name'),
+      supabase.from('locations').select('*').eq('active',true).order('sort_order'),
       supabase.from('simple_shifts').select('*').gte('shift_date',from).lte('shift_date',to),
       supabase.from('simple_time_off').select('*').lte('start_date',to).gte('end_date',from)
     ]);
-    setPeople(p||[]);setShifts(s||[]);setTimeOff(t||[]);
+    setPeople(p||[]);setLocations(l||[]);setShifts(s||[]);setTimeOff(t||[]);
   }
   useEffect(()=>{ if(me) load(); },[me,from,to]);
   useEffect(()=>{ if(me){setPush(pushPermission());registerServiceWorker();} },[me]);
@@ -119,9 +113,9 @@ export default function App(){
     {notice&&<div className="form-card" onClick={()=>setNotice('')}>{notice}</div>}
     <div className="toggle-row"><button className="btn" style={{width:'auto'}} onClick={()=>setModal('schedule')}>+ Schedule</button><button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('timeoff')}>Request Time Off</button>{me.is_manager&&<button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('staff')}>Employees</button>}</div>
     {days.map(d=><section className="store-block" key={ymd(d)}><div className="day-head"><div className="big">{d.toLocaleDateString(undefined,{weekday:'long'})}</div><div className="count">{d.toLocaleDateString(undefined,{month:'short',day:'numeric'})}</div></div>
-      {byDay[ymd(d)].length===0?<div className="empty">No shifts scheduled.</div>:byDay[ymd(d)].map(s=><div className="shift-row" key={s.id}><div className="bar"/><div><div className="who">{shiftName(s.person_id)}</div><div className="meta">{LOCATIONS.find(l=>l.id===s.location_id)?.name||'Store'} · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div></div></div>)}
+      {byDay[ymd(d)].length===0?<div className="empty">No shifts scheduled.</div>:byDay[ymd(d)].map(s=><div className="shift-row" key={s.id}><div className="bar"/><div><div className="who">{shiftName(s.person_id)}</div><div className="meta">{locations.find(l=>l.id===s.location_id)?.name||'Store'} · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div></div></div>)}
     </section>)}
-    {modal==='schedule'&&<ScheduleForm people={people} onClose={()=>setModal(null)} onSaved={load}/>}
+    {modal==='schedule'&&<ScheduleForm people={people} locations={locations} onClose={()=>setModal(null)} onSaved={load}/>}
     {modal==='timeoff'&&<TimeOffForm me={me} onClose={()=>setModal(null)} onSaved={load}/>}
     {modal==='staff'&&<StaffPanel me={me} people={people} onClose={()=>setModal(null)} onSaved={load}/>}
   </div>;
