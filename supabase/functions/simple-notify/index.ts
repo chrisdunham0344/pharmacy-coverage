@@ -17,7 +17,7 @@ Deno.serve(async req=>{
   const vapidPublic=Deno.env.get('VAPID_PUBLIC_KEY'), vapidPrivate=Deno.env.get('VAPID_PRIVATE_KEY');
   if(!vapidPublic||!vapidPrivate)return json({error:'Notifications are not configured'},500);
   webpush.setVapidDetails(Deno.env.get('VAPID_SUBJECT')||'mailto:admin@example.com',vapidPublic,vapidPrivate);
-  const {data:subs}=await admin.from('simple_push_subscriptions').select('*').neq('auth_user_id',user.id);
+  const {data:subs}=await admin.from('simple_push_subscriptions').select('*').neq('person_id',session.person_id);
   let sent=0; const dead:string[]=[];
   for(const sub of subs||[])try{await webpush.sendNotification({endpoint:sub.endpoint,keys:{p256dh:sub.p256dh,auth:sub.auth}},JSON.stringify({title,body,url:'/'}));sent++}catch(e){const code=(e as any)?.statusCode;if(code===404||code===410)dead.push(sub.endpoint);}
   if(dead.length)await admin.from('simple_push_subscriptions').delete().in('endpoint',dead);
