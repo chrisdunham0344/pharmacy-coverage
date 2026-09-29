@@ -251,9 +251,13 @@ function TimeOffForm({ me, onClose, onSaved }) {
   const [busy,setBusy]=useState(false); const [error,setError]=useState('');
   async function save(e){
     e.preventDefault(); setBusy(true); setError('');
-    const {data:{user}}=await supabase.auth.getUser();
     const {data,error}=await supabase.from('simple_time_off').insert({person_id:me.id,start_date:start,end_date:end,note}).select().single();
-    if(error){setError('Could not submit the request.');setBusy(false);return;}
+    if(error){
+      console.error('Time-off request failed:',error);
+      const msg=String(error.message||'').toUpperCase();
+      setError(msg.includes('FLOATER_ONLY')?'This account is not currently marked as an active Floater.':msg.includes('LOGIN_REQUIRED')?'This login session is not connected to an employee.':'Could not submit the request.');
+      setBusy(false);return;
+    }
     await sendPush({title:'WoRxshift',body:`${me.name} requested time off: ${longDate(start)} through ${longDate(end)}.`,kind:'time_off'});
     setBusy(false); onSaved(data); onClose();
   }
