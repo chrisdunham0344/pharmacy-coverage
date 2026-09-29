@@ -20,6 +20,13 @@ Deno.serve(async req=>{
     if(error)return json({error:'Employee already exists'},400);
     return json({ok:true,person:data});
   }
+  if(action==='toggle-floater'){
+    const id=String(input.person_id||'');
+    const value=Boolean(input.is_floater);
+    const {error}=await admin.from('simple_people').update({is_floater:value}).eq('id',id).eq('is_manager',false);
+    if(error)throw error;
+    return json({ok:true});
+  }
   if(action==='remove'){
     const id=String(input.person_id||'');
     const {error}=await admin.from('simple_people').update({active:false}).eq('id',id).eq('is_manager',false);
