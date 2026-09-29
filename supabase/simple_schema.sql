@@ -64,6 +64,11 @@ alter table public.simple_shifts enable row level security;
 alter table public.simple_time_off enable row level security;
 alter table public.simple_push_subscriptions enable row level security;
 
+grant select on public.locations to authenticated;
+drop policy if exists simple_locations_read on public.locations;
+create policy simple_locations_read on public.locations for select to authenticated
+using (public.simple_is_logged_in());
+
 create or replace function public.simple_current_person()
 returns uuid language sql stable security definer set search_path=public as $$
   select person_id from public.simple_sessions where auth_user_id = auth.uid()
