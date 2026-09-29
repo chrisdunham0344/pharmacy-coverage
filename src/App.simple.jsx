@@ -317,7 +317,7 @@ export default function App(){
 }
 
 async function deleteShift(id, label, onSaved, onNotice) {
-  if(!window.confirm(`Delete this shift?\\n\\n${label}`)) return;
+  if(!window.confirm(`Delete this shift?\n\n${label}`)) return;
   const {error}=await supabase.from('simple_shifts').delete().eq('id',id);
   if(error){ onNotice?.('Could not delete that shift.'); return; }
   await sendPush({title:'WoRxshift schedule updated',body:`${label} was removed from the schedule.`,kind:'schedule'});
