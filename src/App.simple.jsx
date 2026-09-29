@@ -42,6 +42,7 @@ function ScheduleForm({ people, locations, onClose, onSaved }) {
   const [start,setStart]=useState('09:00');
   const [end,setEnd]=useState('17:00');
   const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+  useEffect(()=>{ if(!locationId && locations[0]) setLocationId(locations[0].id); },[locations,locationId]);
   async function save(e){
     e.preventDefault(); setBusy(true); setError('');
     const {data:{user}}=await supabase.auth.getUser();
