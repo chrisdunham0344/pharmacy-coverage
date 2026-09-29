@@ -310,6 +310,7 @@ export default function App(){
         </div>)}
       </section>)
     )}
+    {modal==='quick'&&<QuickSchedule people={people} locations={locations} weekStart={weekStart} shifts={shifts} onClose={()=>setModal(null)} onSaved={load} onNotice={setNotice}/>}
     {modal==='schedule'&&<ScheduleForm people={people} locations={locations} onClose={()=>setModal(null)} onSaved={load}/>}
     {modal==='timeoff'&&<TimeOffForm me={me} onClose={()=>setModal(null)} onSaved={load}/>}
     {modal==='staff'&&<StaffPanel me={me} people={people} onClose={()=>setModal(null)} onSaved={load}/>}
