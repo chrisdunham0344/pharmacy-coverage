@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react';
 import { supabase } from './supabaseClient.js';
 import { enablePush, pushPermission, registerServiceWorker, sendPush } from './push.js';
-import { ymd, fromYmd, fmtTime, longDate } from './utils.js';
+import { ymd, addDays, fmtTime, longDate } from './utils.js';
 
 const LOCATIONS = [];
 
@@ -88,11 +88,17 @@ function TimeOffForm({ me, onClose, onSaved }) {
 
 export default function App(){
   const [me,setMe]=useState(null); const [people,setPeople]=useState([]); const [locations,setLocations]=useState([]); const [shifts,setShifts]=useState([]); const [timeOff,setTimeOff]=useState([]);
-  const [week,setWeek]=useState(()=>new Date()); const [modal,setModal]=useState(null); const [notice,setNotice]=useState('');
+  const [view,setView]=useState('week'); const [anchor,setAnchor]=useState(()=>new Date()); const [modal,setModal]=useState(null); const [notice,setNotice]=useState('');
   const [push,setPush]=useState('default');
-  const start=new Date(week.getFullYear(),week.getMonth(),week.getDate()-week.getDay());
-  const days=Array.from({length:7},(_,i)=>new Date(start.getFullYear(),start.getMonth(),start.getDate()+i));
-  const from=ymd(days[0]), to=ymd(days[6]);
+  const weekStart=new Date(anchor.getFullYear(),anchor.getMonth(),anchor.getDate()-anchor.getDay());
+  const monthStart=new Date(anchor.getFullYear(),anchor.getMonth(),1);
+  const monthGridStart=new Date(monthStart.getFullYear(),monthStart.getMonth(),1-monthStart.getDay());
+  const days=useMemo(()=>{
+    if(view==='day') return [new Date(anchor.getFullYear(),anchor.getMonth(),anchor.getDate())];
+    if(view==='month') return Array.from({length:42},(_,i)=>addDays(monthGridStart,i));
+    return Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  },[view,anchor]);
+  const from=ymd(days[0]), to=ymd(days[days.length-1]);
   async function load(){
     const [{data:p},{data:l},{data:s},{data:t}]=await Promise.all([
       supabase.from('simple_people').select('*').order('name'),
@@ -104,18 +110,59 @@ export default function App(){
   }
   useEffect(()=>{ if(me) load(); },[me,from,to]);
   useEffect(()=>{ if(me){setPush(pushPermission());registerServiceWorker();} },[me]);
-  const byDay=useMemo(()=>Object.fromEntries(days.map(d=>[ymd(d),shifts.filter(s=>s.shift_date===ymd(d))])),[shifts]);
+  const byDay=useMemo(()=>Object.fromEntries(days.map(d=>[ymd(d),shifts.filter(s=>s.shift_date===ymd(d))])),[shifts,days]);
   function shiftName(id){return people.find(p=>p.id===id)?.name||'Unknown';}
+  function periodTitle(){
+    if(view==='day') return anchor.toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric',year:'numeric'});
+    if(view==='month') return anchor.toLocaleDateString(undefined,{month:'long',year:'numeric'});
+    return days[0].toLocaleDateString(undefined,{month:'short',day:'numeric'})+' – '+days[6].toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'});
+  }
+  function stepPeriod(direction){
+    if(view==='day') return setAnchor(d=>addDays(d,direction));
+    if(view==='week') return setAnchor(d=>addDays(d,direction*7));
+    return setAnchor(d=>new Date(d.getFullYear(),d.getMonth()+direction,1));
+  }
   async function notifications(){const r=await enablePush();setPush(pushPermission());if(r?.ok)setNotice('Notifications are on for this device.');}
   if(!me) return <Login onLogin={setMe}/>;
   return <div className="app">
     <div className="topbar"><div><h1 className="wordmark" style={{fontSize:22}}>Wo<span className="rx">Rx</span>shift</h1><div className="sub">{me.name}{me.is_manager?' · Manager':''}</div></div><button className="chip-btn" onClick={notifications}>{push==='granted'?'Notifications on':'Turn on notifications'}</button></div>
-    <div className="month-bar"><button className="icon-btn" onClick={()=>setWeek(new Date(start.getFullYear(),start.getMonth(),start.getDate()-7))}>‹</button><div className="month-title">{days[0].toLocaleDateString(undefined,{month:'short',day:'numeric'})} – {days[6].toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div><button className="icon-btn" onClick={()=>setWeek(new Date(start.getFullYear(),start.getMonth(),start.getDate()+7))}>›</button></div>
+    <div className="view-switch">
+      <button className={view==='day'?'on':''} onClick={()=>setView('day')}>Day</button>
+      <button className={view==='week'?'on':''} onClick={()=>setView('week')}>Week</button>
+      <button className={view==='month'?'on':''} onClick={()=>setView('month')}>Month</button>
+    </div>
+    <div className="month-bar">
+      <button className="icon-btn" onClick={()=>stepPeriod(-1)} aria-label="Previous period">‹</button>
+      <div className="month-title">{periodTitle()}</div>
+      <div style={{display:'flex',gap:8}}>
+        <button className="icon-btn" onClick={()=>setAnchor(new Date())} aria-label="Today">Today</button>
+        <button className="icon-btn" onClick={()=>stepPeriod(1)} aria-label="Next period">›</button>
+      </div>
+    </div>
     {notice&&<div className="form-card" onClick={()=>setNotice('')}>{notice}</div>}
     <div className="toggle-row"><button className="btn" style={{width:'auto'}} onClick={()=>setModal('schedule')}>+ Schedule</button>{me.is_floater&&<button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('timeoff')}>Request Time Off</button>}{me.is_manager&&<button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('staff')}>Employees</button>}</div>
-    {days.map(d=><section className="store-block" key={ymd(d)}><div className="day-head"><div className="big">{d.toLocaleDateString(undefined,{weekday:'long'})}</div><div className="count">{d.toLocaleDateString(undefined,{month:'short',day:'numeric'})}</div></div>
-      {byDay[ymd(d)].length===0?<div className="empty">No shifts scheduled.</div>:byDay[ymd(d)].map(s=><div className="shift-row" key={s.id}><div className="bar"/><div><div className="who">{shiftName(s.person_id)}</div><div className="meta">{locations.find(l=>l.id===s.location_id)?.name||'Store'} · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div></div></div>)}
-    </section>)}
+    {view==='month' ? (
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',gap:6}}>
+        {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=><div key={d} style={{fontSize:12,fontWeight:700,textAlign:'center',padding:'4px 0',color:'var(--muted)'}}>{d}</div>)}
+        {days.map(d=>{
+          const key=ymd(d); const cellShifts=byDay[key]||[];
+          const inMonth=d.getMonth()===anchor.getMonth();
+          return <button key={key} onClick={()=>{setAnchor(d);setView('day')}} style={{textAlign:'left',minHeight:105,padding:8,border:'1px solid var(--border)',borderRadius:10,background:inMonth?'var(--card)':'var(--bg)',opacity:inMonth?1:.6,cursor:'pointer'}}>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:5}}>{d.getDate()}</div>
+            {cellShifts.slice(0,4).map(s=><div key={s.id} style={{fontSize:11,lineHeight:1.35,marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
+              <strong>{shiftName(s.person_id)}</strong><br/>{fmtTime(s.start_time)}–{fmtTime(s.end_time)}
+            </div>)}
+            {cellShifts.length>4&&<div style={{fontSize:11,color:'var(--muted)'}}>+{cellShifts.length-4} more</div>}
+            {!cellShifts.length&&<div style={{fontSize:11,color:'var(--muted)'}}>No shifts</div>}
+          </button>;
+        })}
+      </div>
+    ) : (
+      days.map(d=><section className="store-block" key={ymd(d)}>
+        <div className="day-head"><div className="big">{d.toLocaleDateString(undefined,{weekday:'long'})}</div><div className="count">{d.toLocaleDateString(undefined,{month:'short',day:'numeric'})}</div></div>
+        {(byDay[ymd(d)]||[]).length===0?<div className="empty">No shifts scheduled.</div>:(byDay[ymd(d)]||[]).map(s=><div className="shift-row" key={s.id}><div className="bar"/><div><div className="who">{shiftName(s.person_id)}</div><div className="meta">{locations.find(l=>l.id===s.location_id)?.name||'Store'} · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div></div></div>)}
+      </section>)
+    )}
     {modal==='schedule'&&<ScheduleForm people={people} locations={locations} onClose={()=>setModal(null)} onSaved={load}/>}
     {modal==='timeoff'&&<TimeOffForm me={me} onClose={()=>setModal(null)} onSaved={load}/>}
     {modal==='staff'&&<StaffPanel me={me} people={people} onClose={()=>setModal(null)} onSaved={load}/>}
