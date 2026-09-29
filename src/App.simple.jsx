@@ -272,7 +272,7 @@ export default function App(){
       <button className={view==='day'?'on':''} onClick={()=>setView('day')}>Day</button>
       <button className={view==='week'?'on':''} onClick={()=>setView('week')}>Week</button>
       <button className={view==='month'?'on':''} onClick={()=>setView('month')}>Month</button>
-      {me.is_floater&&<button onClick={()=>setModal('timeoff')}>Request Time Off</button>}
+      <button onClick={()=>setModal('timeoff')}>Request Time Off</button>
     </div>
     <div className="month-bar">
       <button className="icon-btn" onClick={()=>stepPeriod(-1)} aria-label="Previous period">‹</button>
