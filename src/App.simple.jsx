@@ -91,7 +91,7 @@ function EditShiftForm({ shift, people, locations, onClose, onSaved }) {
     const store=locations.find(x=>x.id===locationId)?.name||'Store';
     await sendPush({
       title:'WoRxshift schedule updated',
-      body:\`${p?.name||'Someone'} is scheduled at ${store} on ${longDate(date)} ${fmtTime(start)}–${fmtTime(end)}.\`,
+      body:`${p?.name||'Someone'} is scheduled at ${store} on ${longDate(date)} ${fmtTime(start)}–${fmtTime(end)}.`,
       kind:'schedule'
     });
     setBusy(false); await onSaved(data); onClose();
