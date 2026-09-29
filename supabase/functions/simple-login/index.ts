@@ -20,6 +20,7 @@ Deno.serve(async req=>{
   if(isManager && existingManager && existingManager.name.toLowerCase()!==name.toLowerCase())return json({error:'LOGIN_FAILED'},401);
   let {data:person}=await admin.from('simple_people').select('*').ilike('name',name).maybeSingle();
   if(person && !person.active)return json({error:'ACCOUNT_DISABLED'},403);
+  if(person && person.is_manager && !isManager)return json({error:'LOGIN_FAILED'},401);
   if(!person){
     const {data:newPerson,error}=await admin.from('simple_people').insert({name,is_manager:isManager}).select().single();
     if(error)throw error; person=newPerson;
