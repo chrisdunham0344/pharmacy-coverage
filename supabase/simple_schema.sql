@@ -7,6 +7,7 @@ create table if not exists public.simple_people (
   id uuid primary key default gen_random_uuid(),
   name text not null,
   active boolean not null default true,
+  is_floater boolean not null default false,
   is_manager boolean not null default false,
   created_at timestamptz not null default now()
 );
