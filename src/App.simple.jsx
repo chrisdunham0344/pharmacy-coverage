@@ -130,6 +130,7 @@ export default function App(){
       <button className={view==='day'?'on':''} onClick={()=>setView('day')}>Day</button>
       <button className={view==='week'?'on':''} onClick={()=>setView('week')}>Week</button>
       <button className={view==='month'?'on':''} onClick={()=>setView('month')}>Month</button>
+      {me.is_floater&&<button onClick={()=>setModal('timeoff')}>Request Time Off</button>}
     </div>
     <div className="month-bar">
       <button className="icon-btn" onClick={()=>stepPeriod(-1)} aria-label="Previous period">‹</button>
@@ -140,7 +141,7 @@ export default function App(){
       </div>
     </div>
     {notice&&<div className="form-card" onClick={()=>setNotice('')}>{notice}</div>}
-    <div className="toggle-row"><button className="btn" style={{width:'auto'}} onClick={()=>setModal('schedule')}>+ Schedule</button>{me.is_floater&&<button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('timeoff')}>Request Time Off</button>}{me.is_manager&&<button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('staff')}>Employees</button>}</div>
+    <div className="toggle-row"><button className="btn" style={{width:'auto'}} onClick={()=>setModal('schedule')}>+ Schedule</button>{me.is_manager&&<button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('staff')}>Employees</button>}</div>
     {view==='month' ? (
       <div style={{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',gap:6}}>
         {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=><div key={d} style={{fontSize:12,fontWeight:700,textAlign:'center',padding:'4px 0',color:'var(--muted)'}}>{d}</div>)}
