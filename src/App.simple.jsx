@@ -66,6 +66,48 @@ function ScheduleForm({ people, locations, onClose, onSaved }) {
   </form></div>;
 }
 
+function EditShiftForm({ shift, people, locations, onClose, onSaved }) {
+  const [personId,setPersonId]=useState(shift.person_id);
+  const [locationId,setLocationId]=useState(shift.location_id);
+  const [date,setDate]=useState(shift.shift_date);
+  const [start,setStart]=useState(shift.start_time?.slice(0,5)||'09:00');
+  const [end,setEnd]=useState(shift.end_time?.slice(0,5)||'17:00');
+  const [busy,setBusy]=useState(false); const [error,setError]=useState('');
+
+  async function save(e){
+    e.preventDefault(); setBusy(true); setError('');
+    if(!locationId){setError('Choose a store.');setBusy(false);return;}
+    if(start>=end){setError('The end time has to be after the start time.');setBusy(false);return;}
+    const {data,error:saveError}=await supabase.from('simple_shifts')
+      .update({shift_date:date,location_id:locationId,person_id:personId,start_time:start,end_time:end})
+      .eq('id',shift.id).select().single();
+    if(saveError){
+      setError(saveError.message.includes('overlap')||saveError.message.includes('no_overlap')
+        ? 'That overlaps another shift for this employee.'
+        : 'Could not update that shift.');
+      setBusy(false);return;
+    }
+    const p=people.find(x=>x.id===personId);
+    const store=locations.find(x=>x.id===locationId)?.name||'Store';
+    await sendPush({
+      title:'WoRxshift schedule updated',
+      body:\`${p?.name||'Someone'} is scheduled at ${store} on ${longDate(date)} ${fmtTime(start)}–${fmtTime(end)}.\`,
+      kind:'schedule'
+    });
+    setBusy(false); await onSaved(data); onClose();
+  }
+
+  return <div className="overlay"><form className="sheet" onSubmit={save}>
+    <div className="sheet-head"><h2>Edit schedule</h2><button type="button" className="icon-btn" onClick={onClose}>×</button></div>
+    <div className="field"><label>Employee</label><select value={personId} onChange={e=>setPersonId(e.target.value)}>{people.filter(p=>p.active||p.id===shift.person_id).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+    <div className="field"><label>Store</label><select value={locationId} onChange={e=>setLocationId(e.target.value)}>{locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
+    <div className="field"><label>Date</label><input type="date" value={date} onChange={e=>setDate(e.target.value)} /></div>
+    <div className="row-2"><div className="field"><label>Start</label><input type="time" value={start} onChange={e=>setStart(e.target.value)} /></div><div className="field"><label>End</label><input type="time" value={end} onChange={e=>setEnd(e.target.value)} /></div></div>
+    {error&&<div className="error">{error}</div>}
+    <button className="btn" disabled={busy}>{busy?'Saving…':'Save changes'}</button>
+  </form></div>;
+}
+
 function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved, onNotice }) {
   const activePeople=people.filter(p=>p.active);
   const [personId,setPersonId]=useState(activePeople[0]?.id||'');
@@ -306,11 +348,15 @@ export default function App(){
         {(byDay[ymd(d)]||[]).length===0?<div className="empty">No shifts scheduled.</div>:(byDay[ymd(d)]||[]).map(s=><div className="shift-row" key={s.id}>
           <div className="bar"/>
           <div style={{flex:1}}><div className="who">{shiftName(s.person_id)}</div><div className="meta">{locations.find(l=>l.id===s.location_id)?.name||'Store'} · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div></div>
-          <button className="icon-btn" title="Delete shift" aria-label="Delete shift" onClick={()=>deleteShift(s.id, `${shiftName(s.person_id)} · ${locations.find(l=>l.id===s.location_id)?.name||'Store'} · ${fmtTime(s.start_time)}–${fmtTime(s.end_time)}`, load, setNotice)}>×</button>
+          <div style={{display:'flex',gap:6}}>
+            <button className="icon-btn" title="Edit shift" aria-label="Edit shift" onClick={()=>setModal({type:'edit',shift:s})}>Edit</button>
+            <button className="icon-btn" title="Delete shift" aria-label="Delete shift" onClick={()=>deleteShift(s.id, `${shiftName(s.person_id)} · ${locations.find(l=>l.id===s.location_id)?.name||'Store'} · ${fmtTime(s.start_time)}–${fmtTime(s.end_time)}`, load, setNotice)}>×</button>
+          </div>
         </div>)}
       </section>)
     )}
     {modal==='quick'&&<QuickSchedule people={people} locations={locations} weekStart={weekStart} shifts={shifts} onClose={()=>setModal(null)} onSaved={load} onNotice={setNotice}/>}
+    {modal?.type==='edit'&&<EditShiftForm shift={modal.shift} people={people} locations={locations} onClose={()=>setModal(null)} onSaved={load}/>}
     {modal==='schedule'&&<ScheduleForm people={people} locations={locations} onClose={()=>setModal(null)} onSaved={load}/>}
     {modal==='timeoff'&&<TimeOffForm me={me} onClose={()=>setModal(null)} onSaved={load}/>}
     {modal==='staff'&&<StaffPanel me={me} people={people} onClose={()=>setModal(null)} onSaved={load}/>}
