@@ -303,13 +303,26 @@ export default function App(){
     ) : (
       days.map(d=><section className="store-block" key={ymd(d)}>
         <div className="day-head"><div className="big">{d.toLocaleDateString(undefined,{weekday:'long'})}</div><div className="count">{d.toLocaleDateString(undefined,{month:'short',day:'numeric'})}</div></div>
-        {(byDay[ymd(d)]||[]).length===0?<div className="empty">No shifts scheduled.</div>:(byDay[ymd(d)]||[]).map(s=><div className="shift-row" key={s.id}><div className="bar"/><div><div className="who">{shiftName(s.person_id)}</div><div className="meta">{locations.find(l=>l.id===s.location_id)?.name||'Store'} · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div></div></div>)}
+        {(byDay[ymd(d)]||[]).length===0?<div className="empty">No shifts scheduled.</div>:(byDay[ymd(d)]||[]).map(s=><div className="shift-row" key={s.id}>
+          <div className="bar"/>
+          <div style={{flex:1}}><div className="who">{shiftName(s.person_id)}</div><div className="meta">{locations.find(l=>l.id===s.location_id)?.name||'Store'} · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div></div>
+          <button className="icon-btn" title="Delete shift" aria-label="Delete shift" onClick={()=>deleteShift(s.id, `${shiftName(s.person_id)} · ${locations.find(l=>l.id===s.location_id)?.name||'Store'} · ${fmtTime(s.start_time)}–${fmtTime(s.end_time)}`, load, setNotice)}>×</button>
+        </div>)}
       </section>)
     )}
     {modal==='schedule'&&<ScheduleForm people={people} locations={locations} onClose={()=>setModal(null)} onSaved={load}/>}
     {modal==='timeoff'&&<TimeOffForm me={me} onClose={()=>setModal(null)} onSaved={load}/>}
     {modal==='staff'&&<StaffPanel me={me} people={people} onClose={()=>setModal(null)} onSaved={load}/>}
   </div>;
+}
+
+async function deleteShift(id, label, onSaved, onNotice) {
+  if(!window.confirm(`Delete this shift?\\n\\n${label}`)) return;
+  const {error}=await supabase.from('simple_shifts').delete().eq('id',id);
+  if(error){ onNotice?.('Could not delete that shift.'); return; }
+  await sendPush({title:'WoRxshift schedule updated',body:`${label} was removed from the schedule.`,kind:'schedule'});
+  await onSaved();
+  onNotice?.('Shift deleted.');
 }
 
 function StaffPanel({people,onClose,onSaved}){
