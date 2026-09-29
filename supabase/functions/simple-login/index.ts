@@ -29,6 +29,6 @@ Deno.serve(async req=>{
   }
   const {error:sessionError}=await admin.from('simple_sessions').upsert({auth_user_id:user.id,person_id:person.id});
   if(sessionError)throw sessionError;
-  return json({ok:true,person:{id:person.id,name:person.name,is_manager:person.is_manager}});
+  return json({ok:true,person:{id:person.id,name:person.name,is_manager:person.is_manager,is_floater:Boolean(person.is_floater)}});
  }catch(e){console.error(e);return json({error:'Something went wrong'},500)}
 });
