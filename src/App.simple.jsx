@@ -66,6 +66,144 @@ function ScheduleForm({ people, locations, onClose, onSaved }) {
   </form></div>;
 }
 
+function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved, onNotice }) {
+  const activePeople=people.filter(p=>p.active);
+  const [personId,setPersonId]=useState(activePeople[0]?.id||'');
+  const [locationId,setLocationId]=useState(locations[0]?.id||'');
+  const [start,setStart]=useState('09:00');
+  const [end,setEnd]=useState('17:00');
+  const [selectedDays,setSelectedDays]=useState([1,2,3,4,5]);
+  const [busy,setBusy]=useState(false);
+  const [error,setError]=useState('');
+
+  const weekDays=Array.from({length:7},(_,i)=>addDays(weekStart,i));
+  const personShifts=shifts.filter(s=>s.person_id===personId);
+  const existingForDay=dayIndex=>{
+    const key=ymd(weekDays[dayIndex]);
+    return personShifts.filter(s=>s.shift_date===key);
+  };
+
+  function toggleDay(i){
+    setSelectedDays(d=>d.includes(i)?d.filter(x=>x!==i):[...d,i].sort((a,b)=>a-b));
+  }
+
+  function selectAll(){setSelectedDays([0,1,2,3,4,5,6]);}
+  function weekdays(){setSelectedDays([1,2,3,4,5]);}
+  function clearDays(){setSelectedDays([]);}
+
+  async function save(){
+    setError('');
+    if(!personId||!locationId){setError('Choose an employee and store.');return;}
+    if(!selectedDays.length){setError('Choose at least one day.');return;}
+    if(start>=end){setError('The end time has to be after the start time.');return;}
+    setBusy(true);
+    const rows=selectedDays.map(i=>({
+      shift_date:ymd(weekDays[i]),
+      location_id:locationId,
+      person_id:personId,
+      start_time:start,
+      end_time:end
+    }));
+    const {data,error:saveError}=await supabase.from('simple_shifts').insert(rows).select();
+    if(saveError){
+      setError(saveError.message.includes('overlap')||saveError.message.includes('no_overlap')
+        ? 'One or more selected days overlap an existing shift for this employee.'
+        : 'Could not save those shifts.');
+      setBusy(false);
+      return;
+    }
+    const person=activePeople.find(p=>p.id===personId);
+    const store=locations.find(l=>l.id===locationId)?.name||'Store';
+    await sendPush({
+      title:'WoRxshift schedule updated',
+      body:`${person?.name||'Someone'} was scheduled at ${store} for ${selectedDays.length} day${selectedDays.length===1?'':'s'} this week.`,
+      kind:'schedule'
+    });
+    setBusy(false);
+    await onSaved(data);
+    onNotice?.(`${selectedDays.length} shift${selectedDays.length===1?'':'s'} added for ${person?.name||'the employee'}.`);
+    onClose();
+  }
+
+  async function copyPreviousWeek(){
+    setError('');
+    setBusy(true);
+    const previousStart=addDays(weekStart,-7);
+    const previousEnd=addDays(weekStart,-1);
+    const {data:previous,error:fetchError}=await supabase.from('simple_shifts')
+      .select('shift_date,location_id,person_id,start_time,end_time')
+      .gte('shift_date',ymd(previousStart)).lte('shift_date',ymd(previousEnd));
+    if(fetchError){setError('Could not load last week.');setBusy(false);return;}
+    if(!previous?.length){setError('There are no shifts in the previous week to copy.');setBusy(false);return;}
+    const rows=previous.map(s=>({
+      shift_date:ymd(addDays(new Date(s.shift_date+'T00:00:00'),7)),
+      location_id:s.location_id,
+      person_id:s.person_id,
+      start_time:s.start_time,
+      end_time:s.end_time
+    }));
+    const {data,error:copyError}=await supabase.from('simple_shifts').insert(rows).select();
+    if(copyError){
+      setError(copyError.message.includes('overlap')||copyError.message.includes('no_overlap')
+        ? 'Some copied shifts overlap shifts already on this week. Nothing was copied.'
+        : 'Could not copy last week.');
+      setBusy(false);
+      return;
+    }
+    await sendPush({
+      title:'WoRxshift schedule updated',
+      body:`${rows.length} shift${rows.length===1?'':'s'} copied from last week.`,
+      kind:'schedule'
+    });
+    setBusy(false);
+    await onSaved(data);
+    onNotice?.(`${rows.length} shift${rows.length===1?'':'s'} copied from last week.`);
+    onClose();
+  }
+
+  return <div className="overlay"><div className="sheet" style={{maxWidth:760}}>
+    <div className="sheet-head">
+      <div><h2>Build Week</h2><div style={{fontSize:12,color:'var(--muted)'}}>{weekDays[0].toLocaleDateString(undefined,{month:'short',day:'numeric'})} – {weekDays[6].toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'})}</div></div>
+      <button type="button" className="icon-btn" onClick={onClose}>×</button>
+    </div>
+
+    <div className="form-card" style={{marginBottom:14}}>
+      <strong>Copy last week</strong>
+      <div style={{fontSize:13,color:'var(--muted)',margin:'4px 0 10px'}}>Copies the entire previous week's schedule into this week.</div>
+      <button type="button" className="btn ghost" onClick={copyPreviousWeek} disabled={busy}>Copy Previous Week</button>
+    </div>
+
+    <div className="field"><label>Employee</label><select value={personId} onChange={e=>setPersonId(e.target.value)}>{activePeople.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
+    <div className="row-2">
+      <div className="field"><label>Store</label><select value={locationId} onChange={e=>setLocationId(e.target.value)}>{locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
+      <div className="row-2" style={{gap:8}}><div className="field"><label>Start</label><input type="time" value={start} onChange={e=>setStart(e.target.value)}/></div><div className="field"><label>End</label><input type="time" value={end} onChange={e=>setEnd(e.target.value)}/></div></div>
+    </div>
+
+    <div className="field">
+      <label>Days</label>
+      <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
+        <button type="button" className="btn ghost" style={{width:'auto',padding:'7px 10px'}} onClick={weekdays}>Mon–Fri</button>
+        <button type="button" className="btn ghost" style={{width:'auto',padding:'7px 10px'}} onClick={selectAll}>Every day</button>
+        <button type="button" className="btn ghost" style={{width:'auto',padding:'7px 10px'}} onClick={clearDays}>Clear</button>
+      </div>
+      <div style={{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',gap:6}}>
+        {weekDays.map((d,i)=>{
+          const selected=selectedDays.includes(i);
+          const has=existingForDay(i).length>0;
+          return <button key={ymd(d)} type="button" onClick={()=>toggleDay(i)} style={{padding:'10px 4px',borderRadius:9,border:selected?'2px solid var(--accent)':'1px solid var(--line-strong)',background:selected?'var(--accent-soft)':'#fff',fontWeight:selected?700:500}}>
+            <div style={{fontSize:11,color:'var(--muted)'}}>{d.toLocaleDateString(undefined,{weekday:'short'})}</div>
+            <div>{d.getDate()}</div>
+            {has&&<div style={{fontSize:10,color:'var(--muted)',marginTop:3}}>already scheduled</div>}
+          </button>;
+        })}
+      </div>
+    </div>
+
+    {error&&<div className="error">{error}</div>}
+    <button type="button" className="btn" onClick={save} disabled={busy}>{busy?'Saving…':`Add ${selectedDays.length||0} Shift${selectedDays.length===1?'':'s'}`}</button>
+  </div></div>;
+}
+
 function TimeOffForm({ me, onClose, onSaved }) {
   const [start,setStart]=useState(ymd(new Date())); const [end,setEnd]=useState(ymd(new Date())); const [note,setNote]=useState('');
   const [busy,setBusy]=useState(false); const [error,setError]=useState('');
@@ -123,6 +261,10 @@ export default function App(){
     return setAnchor(d=>new Date(d.getFullYear(),d.getMonth()+direction,1));
   }
   async function notifications(){const r=await enablePush();setPush(pushPermission());if(r?.ok)setNotice('Notifications are on for this device.');}
+  function openQuickSchedule(){
+    const ws=new Date(anchor.getFullYear(),anchor.getMonth(),anchor.getDate()-anchor.getDay());
+    setModal('quick');
+  }
   if(!me) return <Login onLogin={setMe}/>;
   return <div className="app">
     <div className="topbar"><div><h1 className="wordmark" style={{fontSize:22}}>Wo<span className="rx">Rx</span>shift</h1><div className="sub">{me.name}{me.is_manager?' · Manager':''}</div></div><button className="chip-btn" onClick={notifications}>{push==='granted'?'Notifications on':'Turn on notifications'}</button></div>
@@ -141,7 +283,7 @@ export default function App(){
       </div>
     </div>
     {notice&&<div className="form-card" onClick={()=>setNotice('')}>{notice}</div>}
-    <div className="toggle-row"><button className="btn" style={{width:'auto'}} onClick={()=>setModal('schedule')}>+ Schedule</button>{me.is_manager&&<button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('staff')}>Employees</button>}</div>
+    <div className="toggle-row"><button className="btn" style={{width:'auto'}} onClick={openQuickSchedule}>Build Week</button><button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('schedule')}>+ Single Shift</button>{me.is_manager&&<button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('staff')}>Employees</button>}</div>
     {view==='month' ? (
       <div style={{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',gap:6}}>
         {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=><div key={d} style={{fontSize:12,fontWeight:700,textAlign:'center',padding:'4px 0',color:'var(--muted)'}}>{d}</div>)}
