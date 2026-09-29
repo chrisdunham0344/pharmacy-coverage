@@ -95,7 +95,7 @@ export default function App(){
   const from=ymd(days[0]), to=ymd(days[6]);
   async function load(){
     const [{data:p},{data:l},{data:s},{data:t}]=await Promise.all([
-      supabase.from('simple_people').select('*').eq('active',true).order('name'),
+      supabase.from('simple_people').select('*').order('name'),
       supabase.from('locations').select('*').eq('active',true).order('sort_order'),
       supabase.from('simple_shifts').select('*').gte('shift_date',from).lte('shift_date',to),
       supabase.from('simple_time_off').select('*').lte('start_date',to).gte('end_date',from)
