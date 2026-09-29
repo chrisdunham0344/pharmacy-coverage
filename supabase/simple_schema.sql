@@ -112,3 +112,35 @@ insert into public.simple_people (name, is_manager)
 select 'Manager', true
 where not exists (select 1 from public.simple_people);
 
+
+create or replace function public.simple_shifts_before_write()
+returns trigger language plpgsql security definer set search_path=public as $$
+declare current_person uuid := public.simple_current_person();
+begin
+  if current_person is null then raise exception 'LOGIN_REQUIRED'; end if;
+  new.created_by := case when tg_op='INSERT' then current_person else old.created_by end;
+  new.created_at := case when tg_op='INSERT' then now() else old.created_at end;
+  return new;
+end;
+$$;
+drop trigger if exists simple_shifts_before_write on public.simple_shifts;
+create trigger simple_shifts_before_write before insert or update on public.simple_shifts
+for each row execute function public.simple_shifts_before_write();
+revoke execute on function public.simple_shifts_before_write() from public, anon, authenticated;
+
+create or replace function public.simple_time_off_before_write()
+returns trigger language plpgsql security definer set search_path=public as $$
+declare current_person uuid := public.simple_current_person();
+begin
+  if current_person is null then raise exception 'LOGIN_REQUIRED'; end if;
+  if not exists(select 1 from public.simple_people where id=current_person and active and is_floater) then
+    raise exception 'FLOATER_ONLY';
+  end if;
+  new.person_id := current_person;
+  return new;
+end;
+$$;
+drop trigger if exists simple_time_off_before_write on public.simple_time_off;
+create trigger simple_time_off_before_write before insert or update on public.simple_time_off
+for each row execute function public.simple_time_off_before_write();
+revoke execute on function public.simple_time_off_before_write() from public, anon, authenticated;
