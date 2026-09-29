@@ -302,7 +302,7 @@ export default function App(){
     if(view==='week') return setAnchor(d=>addDays(d,direction*7));
     return setAnchor(d=>new Date(d.getFullYear(),d.getMonth()+direction,1));
   }
-  async function notifications(){const r=await enablePush();setPush(pushPermission());if(r?.ok)setNotice('Notifications are on for this device.');}
+  async function notifications(){const r=await enablePush();setPush(pushPermission());if(r?.ok)setNotice('Notifications are on for this device.');else setNotice(r?.reason==='unsupported'?'Push notifications are not supported by this browser.':r?.reason==='missing-key'?'Notifications are not configured yet.':r?.reason==='denied'?'Notifications are blocked for this site. Open browser site settings and allow notifications, then try again.':r?.reason==='not-logged-in'?'Your login session is missing. Refresh and log in again.':r?.reason==='save-failed'?'Notifications were allowed, but this device could not be registered.':'Could not turn on notifications. Try again.');}
   function openQuickSchedule(){
     const ws=new Date(anchor.getFullYear(),anchor.getMonth(),anchor.getDate()-anchor.getDay());
     setModal('quick');
