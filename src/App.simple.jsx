@@ -347,8 +347,12 @@ export default function App(){
         {days.map(d=>{
           const key=ymd(d); const cellShifts=byDay[key]||[];
           const inMonth=d.getMonth()===anchor.getMonth();
-          return <button key={key} onClick={()=>{setAnchor(d);setView('day')}} style={{textAlign:'left',minHeight:105,padding:8,border:'1px solid var(--border)',borderRadius:10,background:inMonth?'var(--card)':'var(--bg)',opacity:inMonth?1:.6,cursor:'pointer'}}>
-            <div style={{fontWeight:700,fontSize:13,marginBottom:5}}>{d.getDate()}</div>
+          const todayKey=ymd(new Date());
+          const isToday=key===todayKey;
+          const isPast=key<todayKey;
+          const opacity=isPast?(inMonth?.48:.32):(inMonth?1:.62);
+          return <button key={key} onClick={()=>{setAnchor(d);setView('day')}} style={{textAlign:'left',minHeight:105,padding:8,border:isToday?'2px solid var(--accent)':'1px solid var(--border)',borderRadius:10,background:isToday?'var(--accent-soft)':(inMonth?'var(--card)':'var(--bg)'),opacity,cursor:'pointer',boxShadow:isToday?'0 0 0 2px rgba(30,58,138,.08)':'none'}}>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:5}}>{d.getDate()}{isToday&&<span style={{fontSize:9,marginLeft:5,color:'var(--accent)',fontWeight:800}}>TODAY</span>}</div>
             {cellShifts.slice(0,4).map(s=>{const color=shiftColor(s.location_id);const store=shiftLocation(s.location_id)?.name||'Store';return <div key={s.id} style={{fontSize:11,lineHeight:1.35,marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',borderLeft:`4px solid ${color}`,background:storeTint(color),borderRadius:5,padding:'3px 5px'}}><strong>{shiftName(s.person_id)}</strong><br/><span style={{fontWeight:700}}>{store}</span> · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div>;})}
             {cellShifts.length>4&&<div style={{fontSize:11,color:'var(--muted)'}}>+{cellShifts.length-4} more</div>}
             {!cellShifts.length&&<div style={{fontSize:11,color:'var(--muted)'}}>No shifts</div>}
