@@ -123,7 +123,7 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
 
-  const selectedWeekStart=new Date(`${selectedWeekDate}T00:00:00`);
+  const selectedWeekStart=(()=>{const d=new Date(`${selectedWeekDate}T00:00:00`);d.setDate(d.getDate()-d.getDay());return d;})();
   const weekDays=Array.from({length:7},(_,i)=>addDays(selectedWeekStart,i));
   const personShifts=weekShifts.filter(s=>s.person_id===personId);
   useEffect(()=>{let cancelled=false;async function loadWeek(){const from=ymd(selectedWeekStart),to=ymd(addDays(selectedWeekStart,6));const {data}=await supabase.from('simple_shifts').select('*').gte('shift_date',from).lte('shift_date',to);if(!cancelled)setWeekShifts(data||[]);}loadWeek();return()=>{cancelled=true};},[selectedWeekDate]);
@@ -177,8 +177,8 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
   async function copyPreviousWeek(){
     setError('');
     setBusy(true);
-    const previousStart=addDays(weekStart,-7);
-    const previousEnd=addDays(weekStart,-1);
+    const previousStart=addDays(selectedWeekStart,-7);
+    const previousEnd=addDays(selectedWeekStart,-1);
     const {data:previous,error:fetchError}=await supabase.from('simple_shifts')
       .select('shift_date,location_id,person_id,start_time,end_time')
       .gte('shift_date',ymd(previousStart)).lte('shift_date',ymd(previousEnd));
