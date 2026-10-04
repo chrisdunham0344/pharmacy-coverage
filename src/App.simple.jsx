@@ -335,7 +335,7 @@ export default function App(){
       <button className="icon-btn" onClick={()=>stepPeriod(-1)} aria-label="Previous period">‹</button>
       <div className="month-title">{periodTitle()}</div>
       <div style={{display:'flex',gap:8}}>
-        <button className="icon-btn" onClick={()=>setAnchor(new Date())} aria-label="Today">Today</button>
+        <button className="icon-btn" style={{minWidth:72,paddingLeft:10,paddingRight:10}} onClick={()=>setAnchor(new Date())} aria-label="Today">Today</button>
         <button className="icon-btn" onClick={()=>stepPeriod(1)} aria-label="Next period">›</button>
       </div>
     </div>
@@ -352,7 +352,7 @@ export default function App(){
           const isPast=key<todayKey;
           const opacity=isPast?(inMonth?.48:.32):(inMonth?1:.62);
           return <button key={key} onClick={()=>{setAnchor(d);setView('day')}} style={{textAlign:'left',minHeight:105,padding:8,border:isToday?'2px solid var(--accent)':'1px solid var(--border)',borderRadius:10,background:isToday?'var(--accent-soft)':(inMonth?'var(--card)':'var(--bg)'),opacity,cursor:'pointer',boxShadow:isToday?'0 0 0 2px rgba(30,58,138,.08)':'none'}}>
-            <div style={{fontWeight:700,fontSize:13,marginBottom:5}}>{d.getDate()}{isToday&&<span style={{fontSize:9,marginLeft:5,color:'var(--accent)',fontWeight:800}}>TODAY</span>}</div>
+            <div style={{fontWeight:700,fontSize:13,marginBottom:5}}>{d.getDate()}{isToday&&<span style={{display:'block',fontSize:8,lineHeight:1.1,marginTop:2,color:'var(--accent)',fontWeight:800,textAlign:'center'}}>TODAY</span>}</div>
             {cellShifts.slice(0,4).map(s=>{const color=shiftColor(s.location_id);const store=shiftLocation(s.location_id)?.name||'Store';return <div key={s.id} style={{fontSize:11,lineHeight:1.35,marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',borderLeft:`4px solid ${color}`,background:storeTint(color),borderRadius:5,padding:'3px 5px'}}><strong>{shiftName(s.person_id)}</strong><br/><span style={{fontWeight:700}}>{store}</span> · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div>;})}
             {cellShifts.length>4&&<div style={{fontSize:11,color:'var(--muted)'}}>+{cellShifts.length-4} more</div>}
             {!cellShifts.length&&<div style={{fontSize:11,color:'var(--muted)'}}>No shifts</div>}
