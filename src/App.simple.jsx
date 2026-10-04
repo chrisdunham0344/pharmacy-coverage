@@ -118,11 +118,15 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
   const [start,setStart]=useState('09:00');
   const [end,setEnd]=useState('17:00');
   const [selectedDays,setSelectedDays]=useState([1,2,3,4,5]);
+  const [selectedWeekDate,setSelectedWeekDate]=useState(ymd(weekStart));
+  const [weekShifts,setWeekShifts]=useState(shifts);
   const [busy,setBusy]=useState(false);
   const [error,setError]=useState('');
 
-  const weekDays=Array.from({length:7},(_,i)=>addDays(weekStart,i));
-  const personShifts=shifts.filter(s=>s.person_id===personId);
+  const selectedWeekStart=new Date(`${selectedWeekDate}T00:00:00`);
+  const weekDays=Array.from({length:7},(_,i)=>addDays(selectedWeekStart,i));
+  const personShifts=weekShifts.filter(s=>s.person_id===personId);
+  useEffect(()=>{let cancelled=false;async function loadWeek(){const from=ymd(selectedWeekStart),to=ymd(addDays(selectedWeekStart,6));const {data}=await supabase.from('simple_shifts').select('*').gte('shift_date',from).lte('shift_date',to);if(!cancelled)setWeekShifts(data||[]);}loadWeek();return()=>{cancelled=true};},[selectedWeekDate]);
   const existingForDay=dayIndex=>{
     const key=ymd(weekDays[dayIndex]);
     return personShifts.filter(s=>s.shift_date===key);
@@ -213,6 +217,8 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
     </div>
 
     <div className="form-card" style={{marginBottom:14}}>
+      <div className="field" style={{marginBottom:10}}><label>Schedule week</label><input type="date" value={selectedWeekDate} onChange={e=>setSelectedWeekDate(e.target.value)} /></div>
+      <div style={{fontSize:13,color:'var(--muted)',marginBottom:10}}>Choose any date in the week you want to schedule. The week runs Sunday–Saturday.</div>
       <strong>Copy last week</strong>
       <div style={{fontSize:13,color:'var(--muted)',margin:'4px 0 10px'}}>Copies the entire previous week's schedule into this week.</div>
       <button type="button" className="btn ghost" onClick={copyPreviousWeek} disabled={busy}>Copy Previous Week</button>
