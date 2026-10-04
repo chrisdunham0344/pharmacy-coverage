@@ -4,6 +4,9 @@ import { enablePush, pushPermission, registerServiceWorker, sendPush } from './p
 import { ymd, addDays, fmtTime, longDate } from './utils.js';
 
 const LOCATIONS = [];
+const STORE_COLORS=['#38bdf8','#a78bfa','#34d399','#f59e0b','#fb7185','#22d3ee','#f97316','#84cc16'];
+function storeColor(location, locations){ if(location?.color) return location.color; const i=Math.max(0,locations.findIndex(l=>l.id===location?.id)); return STORE_COLORS[i%STORE_COLORS.length]; }
+function storeTint(hex){ const clean=String(hex||'').replace('#',''); return /^[0-9a-fA-F]{6}$/.test(clean)?`#${clean}18`:'#38bdf818'; }
 
 function Login({ onLogin }) {
   const [name, setName] = useState('');
@@ -296,6 +299,8 @@ export default function App(){
   useEffect(()=>{ if(me){setPush(pushPermission());registerServiceWorker();} },[me]);
   const byDay=useMemo(()=>Object.fromEntries(days.map(d=>[ymd(d),shifts.filter(s=>s.shift_date===ymd(d))])),[shifts,days]);
   function shiftName(id){return people.find(p=>p.id===id)?.name||'Unknown';}
+  function shiftLocation(id){return locations.find(l=>l.id===id);}
+  function shiftColor(id){return storeColor(shiftLocation(id),locations);}
   function periodTitle(){
     if(view==='day') return anchor.toLocaleDateString(undefined,{weekday:'long',month:'short',day:'numeric',year:'numeric'});
     if(view==='month') return anchor.toLocaleDateString(undefined,{month:'long',year:'numeric'});
@@ -329,7 +334,7 @@ export default function App(){
       </div>
     </div>
     {notice&&<div className="form-card" onClick={()=>setNotice('')}>{notice}</div>}
-    <div className="toggle-row"><button className="btn" style={{width:'auto'}} onClick={openQuickSchedule}>Build Week</button><button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('schedule')}>+ Single Shift</button>{me.is_manager&&<button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('staff')}>Employees</button>}</div>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>{locations.map(l=><div key={l.id} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:'var(--muted)'}}><span style={{width:10,height:10,borderRadius:3,background:storeColor(l,locations),display:'inline-block'}}/>{l.name}</div>)}</div><div className="toggle-row"><button className="btn" style={{width:'auto'}} onClick={openQuickSchedule}>Build Week</button><button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('schedule')}>+ Single Shift</button>{me.is_manager&&<button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('staff')}>Employees</button>}</div>
     {view==='month' ? (
       <div style={{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',gap:6}}>
         {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=><div key={d} style={{fontSize:12,fontWeight:700,textAlign:'center',padding:'4px 0',color:'var(--muted)'}}>{d}</div>)}
@@ -338,9 +343,7 @@ export default function App(){
           const inMonth=d.getMonth()===anchor.getMonth();
           return <button key={key} onClick={()=>{setAnchor(d);setView('day')}} style={{textAlign:'left',minHeight:105,padding:8,border:'1px solid var(--border)',borderRadius:10,background:inMonth?'var(--card)':'var(--bg)',opacity:inMonth?1:.6,cursor:'pointer'}}>
             <div style={{fontWeight:700,fontSize:13,marginBottom:5}}>{d.getDate()}</div>
-            {cellShifts.slice(0,4).map(s=><div key={s.id} style={{fontSize:11,lineHeight:1.35,marginBottom:3,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap'}}>
-              <strong>{shiftName(s.person_id)}</strong><br/>{fmtTime(s.start_time)}–{fmtTime(s.end_time)}
-            </div>)}
+            {cellShifts.slice(0,4).map(s=>{const color=shiftColor(s.location_id);const store=shiftLocation(s.location_id)?.name||'Store';return <div key={s.id} style={{fontSize:11,lineHeight:1.35,marginBottom:4,overflow:'hidden',textOverflow:'ellipsis',whiteSpace:'nowrap',borderLeft:`4px solid ${color}`,background:storeTint(color),borderRadius:5,padding:'3px 5px'}}><strong>{shiftName(s.person_id)}</strong><br/><span style={{fontWeight:700}}>{store}</span> · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div>;})}
             {cellShifts.length>4&&<div style={{fontSize:11,color:'var(--muted)'}}>+{cellShifts.length-4} more</div>}
             {!cellShifts.length&&<div style={{fontSize:11,color:'var(--muted)'}}>No shifts</div>}
           </button>;
@@ -349,12 +352,12 @@ export default function App(){
     ) : (
       days.map(d=><section className="store-block" key={ymd(d)}>
         <div className="day-head"><div className="big">{d.toLocaleDateString(undefined,{weekday:'long'})}</div><div className="count">{d.toLocaleDateString(undefined,{month:'short',day:'numeric'})}</div></div>
-        {(byDay[ymd(d)]||[]).length===0?<div className="empty">No shifts scheduled.</div>:(byDay[ymd(d)]||[]).map(s=><div className="shift-row" key={s.id}>
-          <div className="bar"/>
-          <div style={{flex:1}}><div className="who">{shiftName(s.person_id)}</div><div className="meta">{locations.find(l=>l.id===s.location_id)?.name||'Store'} · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div></div>
+        {(byDay[ymd(d)]||[]).length===0?<div className="empty">No shifts scheduled.</div>:(byDay[ymd(d)]||[]).map(s=><div className="shift-row" key={s.id} style={{borderLeft:`6px solid ${shiftColor(s.location_id)}`,background:storeTint(shiftColor(s.location_id))}}>
+          <div className="bar" style={{background:shiftColor(s.location_id)}}/>
+          <div style={{flex:1}}><div className="who">{shiftName(s.person_id)}</div><div className="meta"><strong style={{color:shiftColor(s.location_id)}}>{shiftLocation(s.location_id)?.name||'Store'}</strong> · {fmtTime(s.start_time)}–{fmtTime(s.end_time)}</div></div>
           <div style={{display:'flex',gap:6}}>
             <button className="icon-btn" title="Edit shift" aria-label="Edit shift" onClick={()=>setModal({type:'edit',shift:s})}>Edit</button>
-            <button className="icon-btn" title="Delete shift" aria-label="Delete shift" onClick={()=>deleteShift(s.id, `${shiftName(s.person_id)} · ${locations.find(l=>l.id===s.location_id)?.name||'Store'} · ${fmtTime(s.start_time)}–${fmtTime(s.end_time)}`, load, setNotice)}>×</button>
+            <button className="icon-btn" title="Delete shift" aria-label="Delete shift" onClick={()=>deleteShift(s.id, `${shiftName(s.person_id)} · ${shiftLocation(s.location_id)?.name||'Store'} · ${fmtTime(s.start_time)}–${fmtTime(s.end_time)}`, load, setNotice)}>×</button>
           </div>
         </div>)}
       </section>)
