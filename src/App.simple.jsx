@@ -238,7 +238,7 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
           return <button key={ymd(d)} type="button" onClick={()=>toggleDay(i)} style={{padding:'10px 4px',borderRadius:9,border:selected?'2px solid var(--accent)':'1px solid var(--line-strong)',background:selected?'var(--accent-soft)':'#fff',fontWeight:selected?700:500}}>
             <div style={{fontSize:11,color:'var(--muted)'}}>{d.toLocaleDateString(undefined,{weekday:'short'})}</div>
             <div>{d.getDate()}</div>
-            {has&&<div style={{fontSize:10,color:'var(--muted)',marginTop:3}}>already scheduled</div>}
+            {has&&<div style={{fontSize:10,color:'var(--muted)',marginTop:3,fontWeight:700}}>SLATED</div>}
           </button>;
         })}
       </div>
