@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react';
-import { supabase } from './supabaseClient.js';
+import { supabase, configOk } from './supabaseClient.js';
 import { enablePush, pushPermission, registerServiceWorker, sendPush } from './push.js';
 import { ymd, addDays, fmtTime, longDate } from './utils.js';
 
@@ -17,15 +17,35 @@ function Login({ onLogin }) {
     e.preventDefault();
     setBusy(true); setError('');
     try {
-      const { data: auth, error: authError } = await supabase.auth.signInAnonymously();
-      if (authError) throw authError;
+      if (!configOk) {
+        throw new Error('APP_CONFIG_MISSING');
+      }
+      const { error: authError } = await supabase.auth.signInAnonymously();
+      if (authError) {
+        console.error('Rx Staff anonymous sign-in failed:', authError);
+        throw new Error('ANONYMOUS_SIGN_IN_FAILED');
+      }
       const { data, error } = await supabase.functions.invoke('simple-login', {
         body: { name: name.trim(), passcode },
       });
-      if (error || !data?.ok) throw new Error(data?.error || error?.message || 'LOGIN_FAILED');
+      if (error) {
+        console.error('Rx Staff simple-login function failed:', error);
+        throw new Error('LOGIN_SERVICE_UNAVAILABLE');
+      }
+      if (!data?.ok) {
+        const code = String(data?.error || '');
+        if (code === 'LOGIN_FAILED' || code === 'ACCOUNT_DISABLED') throw new Error(code);
+        console.error('Rx Staff login returned an unexpected response:', data);
+        throw new Error('LOGIN_SERVICE_UNAVAILABLE');
+      }
       onLogin(data.person);
     } catch (e) {
-      setError(String(e.message).includes('LOGIN_FAILED') ? 'That name or passcode is not correct.' : 'Could not connect. Try again.');
+      const code = String(e?.message || '');
+      if (code.includes('LOGIN_FAILED')) setError('That name or passcode is not correct.');
+      else if (code.includes('ACCOUNT_DISABLED')) setError('This account is disabled. Ask the manager for help.');
+      else if (code.includes('APP_CONFIG_MISSING')) setError('App connection settings are missing in this Preview deployment. Add VITE_SUPABASE_URL and VITE_SUPABASE_ANON_KEY to the Preview environment, then redeploy.');
+      else if (code.includes('ANONYMOUS_SIGN_IN_FAILED')) setError('Could not start a login session. In Supabase, enable Anonymous Sign-Ins under Authentication settings, then try again.');
+      else setError('The login service could not be reached. Check the Preview deployment and Supabase function logs, then try again.');
     } finally { setBusy(false); }
   }
   return <div className="signin-wrap"><form className="signin" onSubmit={submit}>
