@@ -29,8 +29,8 @@ function Login({ onLogin }) {
     } finally { setBusy(false); }
   }
   return <div className="signin-wrap"><form className="signin" onSubmit={submit}>
-    <h1 className="wordmark">Wo<span className="rx">Rx</span>shift</h1>
-    <p>Enter your name and pharmacy passcode.</p>
+    <h1 className="wordmark">Rx <span className="rx">Staff</span></h1>
+    <p className="tagline">Your Pharmacy. One Schedule.</p><p>Enter your name and pharmacy passcode.</p>
     <div className="field"><label>Your name</label><input value={name} onChange={e=>setName(e.target.value)} required /></div>
     <div className="field"><label>Passcode</label><input type="password" inputMode="numeric" value={passcode} onChange={e=>setPasscode(e.target.value)} required /></div>
     {error && <div className="error">{error}</div>}
@@ -56,7 +56,7 @@ function ScheduleForm({ people, locations, onClose, onSaved }) {
     }).select().single();
     if(error){setError(error.message.includes('simple_shift_no_overlap')?'That overlaps an existing shift.':'Could not save that shift.');setBusy(false);return;}
     const p=people.find(x=>x.id===personId);
-    await sendPush({title:'WoRxshift',body:`${p?.name||'Someone'} is scheduled at ${locations.find(x=>x.id===locationId)?.name} on ${longDate(date)} ${fmtTime(start)}–${fmtTime(end)}.`,kind:'schedule'});
+    await sendPush({title:'Rx Staff',body:`${p?.name||'Someone'} is scheduled at ${locations.find(x=>x.id===locationId)?.name} on ${longDate(date)} ${fmtTime(start)}–${fmtTime(end)}.`,kind:'schedule'});
     setBusy(false); onSaved(data); onClose();
   }
   return <div className="overlay"><form className="sheet" onSubmit={save}>
@@ -93,7 +93,7 @@ function EditShiftForm({ shift, people, locations, onClose, onSaved }) {
     const p=people.find(x=>x.id===personId);
     const store=locations.find(x=>x.id===locationId)?.name||'Store';
     await sendPush({
-      title:'WoRxshift schedule updated',
+      title:'Rx Staff schedule updated',
       body:`${p?.name||'Someone'} is scheduled at ${store} on ${longDate(date)} ${fmtTime(start)}–${fmtTime(end)}.`,
       kind:'schedule'
     });
@@ -164,7 +164,7 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
     const person=activePeople.find(p=>p.id===personId);
     const store=locations.find(l=>l.id===locationId)?.name||'Store';
     await sendPush({
-      title:'WoRxshift schedule updated',
+      title:'Rx Staff schedule updated',
       body:`${person?.name||'Someone'} was scheduled at ${store} for ${selectedDays.length} day${selectedDays.length===1?'':'s'} this week.`,
       kind:'schedule'
     });
@@ -200,7 +200,7 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
       return;
     }
     await sendPush({
-      title:'WoRxshift schedule updated',
+      title:'Rx Staff schedule updated',
       body:`${rows.length} shift${rows.length===1?'':'s'} copied from last week.`,
       kind:'schedule'
     });
@@ -267,7 +267,7 @@ function TimeOffForm({ me, onClose, onSaved }) {
       setError(msg.includes('FLOATER_ONLY')?'This account is not currently marked as an active Floater.':msg.includes('LOGIN_REQUIRED')?'This login session is not connected to an employee.':'Could not submit the request.');
       setBusy(false);return;
     }
-    await sendPush({title:'WoRxshift',body:`${me.name} requested time off: ${longDate(start)} through ${longDate(end)}.`,kind:'time_off'});
+    await sendPush({title:'Rx Staff',body:`${me.name} requested time off: ${longDate(start)} through ${longDate(end)}.`,kind:'time_off'});
     setBusy(false); onSaved(data); onClose();
   }
   return <div className="overlay"><form className="sheet" onSubmit={save}>
@@ -324,7 +324,7 @@ export default function App(){
   }
   if(!me) return <Login onLogin={setMe}/>;
   return <div className="app">
-    <div className="topbar"><div><h1 className="wordmark" style={{fontSize:22}}>Wo<span className="rx">Rx</span>shift</h1><div className="sub">{me.name}{me.is_manager?' · Manager':''}</div></div><button className="chip-btn" onClick={notifications}>{push==='granted'?'Notifications on':'Turn on notifications'}</button></div>
+    <div className="topbar"><div><h1 className="wordmark" style={{fontSize:22}}>Rx <span className="rx">Staff</span></h1><div className="sub">{me.name}{me.is_manager?' · Manager':''}</div></div><button className="chip-btn" onClick={notifications}>{push==='granted'?'Notifications on':'Turn on notifications'}</button></div>
     <div className="view-switch">
       <button className={view==='day'?'on':''} onClick={()=>setView('day')}>Day</button>
       <button className={view==='week'?'on':''} onClick={()=>setView('week')}>Week</button>
@@ -384,7 +384,7 @@ async function deleteShift(id, label, onSaved, onNotice) {
   if(!window.confirm(`Delete this shift?\n\n${label}`)) return;
   const {error}=await supabase.from('simple_shifts').delete().eq('id',id);
   if(error){ onNotice?.('Could not delete that shift.'); return; }
-  await sendPush({title:'WoRxshift schedule updated',body:`${label} was removed from the schedule.`,kind:'schedule'});
+  await sendPush({title:'Rx Staff schedule updated',body:`${label} was removed from the schedule.`,kind:'schedule'});
   await onSaved();
   onNotice?.('Shift deleted.');
 }
