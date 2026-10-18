@@ -58,7 +58,7 @@ function Login({ onLogin }) {
   </form></div>;
 }
 
-function ScheduleForm({ people, locations, onClose, onSaved }) {
+function ScheduleForm({ people, locations, onClose, onSaved, me }) {
   const [personId,setPersonId]=useState(people[0]?.id||'');
   const [locationId,setLocationId]=useState('');
   const [date,setDate]=useState(ymd(new Date()));
@@ -131,7 +131,7 @@ function EditShiftForm({ shift, people, locations, onClose, onSaved }) {
   </form></div>;
 }
 
-function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved, onNotice }) {
+function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved, onNotice, me }) {
   const activePeople=people.filter(p=>p.active);
   const [personId,setPersonId]=useState(activePeople[0]?.id||'');
   const [locationId,setLocationId]=useState(locations[0]?.id||'');
@@ -360,7 +360,7 @@ export default function App(){
       </div>
     </div>
     {notice&&<div className="form-card" onClick={()=>setNotice('')}>{notice}</div>}
-    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>{locations.map(l=><div key={l.id} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:'var(--muted)'}}><span style={{width:10,height:10,borderRadius:3,background:storeColor(l,locations),display:'inline-block'}}/>{l.name}</div>)}</div><div className="toggle-row"><button className="btn" style={{width:'auto'}} onClick={openQuickSchedule}>Build Week</button><button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('schedule')}>+ Single Shift</button>{me.is_manager&&<button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('staff')}>Employees</button>}</div>
+    <div style={{display:'flex',gap:8,flexWrap:'wrap',marginBottom:12}}>{locations.map(l=><div key={l.id} style={{display:'inline-flex',alignItems:'center',gap:6,fontSize:12,fontWeight:600,color:'var(--muted)'}}><span style={{width:10,height:10,borderRadius:3,background:storeColor(l,locations),display:'inline-block'}}/>{l.name}</div>)}</div><div className="toggle-row">{me.is_manager&&<><button className="btn" style={{width:'auto'}} onClick={openQuickSchedule}>Build Week</button><button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('schedule')}>+ Single Shift</button><button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('staff')}>Employees</button></>}{!me.is_manager&&<button className="btn ghost" style={{width:'auto'}} onClick={()=>setModal('timeoff')}>Request time off</button>}</div>
     {view==='month' ? (
       <div style={{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',gap:6}}>
         {['Sun','Mon','Tue','Wed','Thu','Fri','Sat'].map(d=><div key={d} style={{fontSize:12,fontWeight:700,textAlign:'center',padding:'4px 0',color:'var(--muted)'}}>{d}</div>)}
@@ -392,9 +392,9 @@ export default function App(){
         </div>)}
       </section>)
     )}
-    {modal==='quick'&&<QuickSchedule people={people} locations={locations} weekStart={weekStart} shifts={shifts} onClose={()=>setModal(null)} onSaved={load} onNotice={setNotice}/>}
+    {modal==='quick'&&<QuickSchedule me={me} people={people} locations={locations} weekStart={weekStart} shifts={shifts} onClose={()=>setModal(null)} onSaved={load} onNotice={setNotice}/>}
     {modal?.type==='edit'&&<EditShiftForm shift={modal.shift} people={people} locations={locations} onClose={()=>setModal(null)} onSaved={load}/>}
-    {modal==='schedule'&&<ScheduleForm people={people} locations={locations} onClose={()=>setModal(null)} onSaved={load}/>}
+    {modal==='schedule'&&<ScheduleForm me={me} people={people} locations={locations} onClose={()=>setModal(null)} onSaved={load}/>}
     {modal==='timeoff'&&<TimeOffForm me={me} onClose={()=>setModal(null)} onSaved={load}/>}
     {modal==='staff'&&<StaffPanel me={me} people={people} onClose={()=>setModal(null)} onSaved={load}/>}
   </div>;
