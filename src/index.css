@@ -405,7 +405,8 @@ input:focus, select:focus, textarea:focus, button:focus-visible {
 }
 
 .signin h1 { font-size: 19px; margin: 0 0 4px; font-weight: 600; }
-.signin p { color: var(--muted); font-size: 13px; margin: 0 0 18px; }\n.signin p.tagline { color: var(--accent); font-weight: 700; font-size: 12px; margin: 0 0 8px; letter-spacing: .01em; }
+.signin p { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+.signin p.tagline { color: var(--accent); font-weight: 700; font-size: 12px; margin: 0 0 8px; letter-spacing: .01em; }
 
 .error { color: var(--danger); font-size: 13px; margin-top: 10px; }
 
