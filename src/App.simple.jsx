@@ -134,8 +134,7 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
   const activePeople=people.filter(p=>p.active);
   const [personId,setPersonId]=useState(activePeople[0]?.id||'');
   const [locationId,setLocationId]=useState(locations[0]?.id||'');
-  const [start,setStart]=useState('09:00');
-  const [end,setEnd]=useState('17:00');
+  const [dayTimes,setDayTimes]=useState({});
   const [selectedDays,setSelectedDays]=useState([1,2,3,4,5]);
   const [groups,setGroups]=useState([]);
   const [selectedWeekDate,setSelectedWeekDate]=useState(ymd(weekStart));
