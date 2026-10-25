@@ -6,10 +6,10 @@
   --line-strong: #cbd5e1;
   --text: #16202e;
   --muted: #64748b;
-  --accent: #132858;
-  --accent-soft: #e9eef8;
-  --brand-green: #22a44a;
-  --brand-green-soft: #e6f6eb;
+  --accent: #0f766e;
+  --accent-soft: #ccfbf1;
+  --brand-green: #0d9488;
+  --brand-green-soft: #ccfbf1;
   --danger: #c2323b;
   --radius: 10px;
   color-scheme: light;
@@ -406,6 +406,7 @@ input:focus, select:focus, textarea:focus, button:focus-visible {
 
 .signin h1 { font-size: 19px; margin: 0 0 4px; font-weight: 600; }
 .signin p { color: var(--muted); font-size: 13px; margin: 0 0 18px; }
+.signin p.tagline { color: var(--accent); font-weight: 700; font-size: 12px; margin: 0 0 8px; letter-spacing: .01em; }
 
 .error { color: var(--danger); font-size: 13px; margin-top: 10px; }
 

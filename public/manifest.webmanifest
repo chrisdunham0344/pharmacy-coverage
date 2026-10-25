@@ -1,11 +1,11 @@
 {
-  "name": "WoRxshift",
-  "short_name": "WoRxshift",
-  "description": "Pharmacist coverage schedule",
+  "name": "Rx Staff",
+  "short_name": "Rx Staff",
+  "description": "Your Pharmacy. One Schedule.",
   "start_url": "/",
   "display": "standalone",
   "background_color": "#ffffff",
-  "theme_color": "#132858",
+  "theme_color": "#0f766e",
   "icons": [
     { "src": "/icon-192.png", "sizes": "192x192", "type": "image/png" },
     { "src": "/icon-512.png", "sizes": "512x512", "type": "image/png" },
