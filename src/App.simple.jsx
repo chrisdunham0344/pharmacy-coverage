@@ -166,7 +166,15 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
   }
   function changeLocation(nextLocationId){
     if(nextLocationId===locationId) return;
-    if(selectedDays.length) setGroups(g=>[...g.filter(x=>x.locationId!==locationId),{locationId,days:selectedDays,start,end}]);
+    setGroups(current=>{
+      const updated=selectedDays.length
+        ? [...current.filter(x=>x.locationId!==locationId),{locationId,days:selectedDays,start,end}]
+        : current;
+      const nextGroup=updated.find(g=>g.locationId===nextLocationId);
+      setStart(nextGroup?.start||'09:00');
+      setEnd(nextGroup?.end||'17:00');
+      return updated;
+    });
     setSelectedDays([]);
     setLocationId(nextLocationId);
   }
