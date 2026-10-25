@@ -154,24 +154,27 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
   };
 
   function toggleDay(i){
+    const assigned=groups.some(g=>g.days.includes(i));
+    if(assigned){setError('That day is already assigned to another store. Switch to that store to change it.');return;}
+    setError('');
     setSelectedDays(d=>d.includes(i)?d.filter(x=>x!==i):[...d,i].sort((a,b)=>a-b));
   }
 
   function changeLocation(nextLocationId){
     if(nextLocationId===locationId) return;
-    if(selectedDays.length) setGroups(g=>[...g,{locationId,days:selectedDays,start,end}]);
+    if(selectedDays.length) setGroups(g=>[...g.filter(x=>x.locationId!==locationId),{locationId,days:selectedDays,start,end}]);
     setSelectedDays([]);
     setLocationId(nextLocationId);
   }
 
-  function selectAll(){setSelectedDays([0,1,2,3,4,5,6]);}
-  function weekdays(){setSelectedDays([1,2,3,4,5]);}
-  function clearDays(){setSelectedDays([]);}
+  function selectAll(){setError('');setSelectedDays([0,1,2,3,4,5,6].filter(i=>!groups.some(g=>g.days.includes(i))));}
+  function weekdays(){setError('');setSelectedDays([1,2,3,4,5].filter(i=>!groups.some(g=>g.days.includes(i))));}
+  function clearDays(){setError('');setSelectedDays([]);}
 
   async function save(){
     setError('');
     if(!personId||!locationId){setError('Choose an employee and store.');return;}
-    const allGroups=[...groups,...(selectedDays.length?[{locationId,days:selectedDays,start,end}]:[])];
+    const allGroups=[...groups.filter(g=>g.locationId!==locationId),...(selectedDays.length?[{locationId,days:selectedDays,start,end}]:[])];
     if(!allGroups.length){setError('Choose at least one day.');return;}
     if(allGroups.some(g=>g.start>=g.end)){setError('The end time has to be after the start time for every group.');return;}
     const assignedDays=allGroups.flatMap(g=>g.days);
@@ -282,7 +285,7 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
     </div>
 
     {error&&<div className="error">{error}</div>}
-    <button type="button" className="btn" onClick={save} disabled={busy}>{busy?'Saving…':`Save ${groups.reduce((n,g)=>n+g.days.length,0)+selectedDays.length} Shift${groups.reduce((n,g)=>n+g.days.length,0)+selectedDays.length===1?'':'s'}`}</button>
+    <button type="button" className="btn" onClick={save} disabled={busy}>{busy?'Saving…':`Save ${new Set([...groups.filter(g=>g.locationId!==locationId).flatMap(g=>g.days),...selectedDays]).size} Shift${new Set([...groups.filter(g=>g.locationId!==locationId).flatMap(g=>g.days),...selectedDays]).size===1?'':'s'}`}</button>
   </div></div>;
 }
 
