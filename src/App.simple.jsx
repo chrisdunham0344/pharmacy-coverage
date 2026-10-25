@@ -82,7 +82,7 @@ function ScheduleForm({ people, locations, onClose, onSaved, me }) {
   return <div className="overlay"><form className="sheet" onSubmit={save}>
     <div className="sheet-head"><h2>Add schedule</h2><button type="button" className="icon-btn" onClick={onClose}>×</button></div>
     <div className="field"><label>Employee</label><select value={personId} onChange={e=>setPersonId(e.target.value)}>{people.filter(p=>p.active).map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-    <div className="field"><label>Store</label><select value={locationId} onChange={e=>setLocationId(e.target.value)}>{locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
+    <div className="field"><label>Store (switching stores saves the selected days as a group)</label><select value={locationId} onChange={e=>changeLocation(e.target.value)}>{locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
     <div className="field"><label>Date</label><input type="date" value={date} onChange={e=>setDate(e.target.value)} /></div>
     <div className="row-2"><div className="field"><label>Start</label><input type="time" value={start} onChange={e=>setStart(e.target.value)} /></div><div className="field"><label>End</label><input type="time" value={end} onChange={e=>setEnd(e.target.value)} /></div></div>
     {error&&<div className="error">{error}</div>}<button className="btn" disabled={busy}>{busy?'Saving…':'Save schedule'}</button>
@@ -138,6 +138,7 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
   const [start,setStart]=useState('09:00');
   const [end,setEnd]=useState('17:00');
   const [selectedDays,setSelectedDays]=useState([1,2,3,4,5]);
+  const [groups,setGroups]=useState([]);
   const [selectedWeekDate,setSelectedWeekDate]=useState(ymd(weekStart));
   const [weekShifts,setWeekShifts]=useState(shifts);
   const [busy,setBusy]=useState(false);
@@ -156,6 +157,13 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
     setSelectedDays(d=>d.includes(i)?d.filter(x=>x!==i):[...d,i].sort((a,b)=>a-b));
   }
 
+  function changeLocation(nextLocationId){
+    if(nextLocationId===locationId) return;
+    if(selectedDays.length) setGroups(g=>[...g,{locationId,days:selectedDays,start,end}]);
+    setSelectedDays([]);
+    setLocationId(nextLocationId);
+  }
+
   function selectAll(){setSelectedDays([0,1,2,3,4,5,6]);}
   function weekdays(){setSelectedDays([1,2,3,4,5]);}
   function clearDays(){setSelectedDays([]);}
@@ -163,16 +171,15 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
   async function save(){
     setError('');
     if(!personId||!locationId){setError('Choose an employee and store.');return;}
-    if(!selectedDays.length){setError('Choose at least one day.');return;}
-    if(start>=end){setError('The end time has to be after the start time.');return;}
+    const allGroups=[...groups,...(selectedDays.length?[{locationId,days:selectedDays,start,end}]:[])];
+    if(!allGroups.length){setError('Choose at least one day.');return;}
+    if(allGroups.some(g=>g.start>=g.end)){setError('The end time has to be after the start time for every group.');return;}
+    const assignedDays=allGroups.flatMap(g=>g.days);
+    if(new Set(assignedDays).size!==assignedDays.length){setError('A day is assigned more than once. Clear or change the duplicate day before saving.');return;}
     setBusy(true);
-    const rows=selectedDays.map(i=>({
-      shift_date:ymd(weekDays[i]),
-      location_id:locationId,
-      person_id:personId,
-      start_time:start,
-      end_time:end
-    }));
+    const rows=allGroups.flatMap(g=>g.days.map(i=>({
+      shift_date:ymd(weekDays[i]),location_id:g.locationId,person_id:personId,start_time:g.start,end_time:g.end
+    })));
     const {data,error:saveError}=await supabase.from('simple_shifts').insert(rows).select();
     if(saveError){
       setError(saveError.message.includes('overlap')||saveError.message.includes('no_overlap')
@@ -182,15 +189,15 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
       return;
     }
     const person=activePeople.find(p=>p.id===personId);
-    const store=locations.find(l=>l.id===locationId)?.name||'Store';
+    const summary=allGroups.map(g=>`${locations.find(l=>l.id===g.locationId)?.name||'Store'} (${g.days.length})`).join(', ');
     await sendPush({
       title:'Rx Staff schedule updated',
-      body:`${person?.name||'Someone'} was scheduled at ${store} for ${selectedDays.length} day${selectedDays.length===1?'':'s'} this week.`,
+      body:`${person?.name||'Someone'} was scheduled this week: ${summary}.`,
       kind:'schedule'
     });
     setBusy(false);
     await onSaved(data);
-    onNotice?.(`${selectedDays.length} shift${selectedDays.length===1?'':'s'} added for ${person?.name||'the employee'}.`);
+    onNotice?.(`${rows.length} shift${rows.length===1?'':'s'} added for ${person?.name||'the employee'}.`);
     onClose();
   }
 
@@ -250,8 +257,9 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
       <div className="row-2" style={{gap:8}}><div className="field"><label>Start</label><input type="time" value={start} onChange={e=>setStart(e.target.value)}/></div><div className="field"><label>End</label><input type="time" value={end} onChange={e=>setEnd(e.target.value)}/></div></div>
     </div>
 
+    {groups.length>0&&<div className="form-card" style={{marginBottom:12}}><strong>Assigned groups</strong>{groups.map((g,idx)=>{const loc=locations.find(l=>l.id===g.locationId);const color=storeColor(loc,locations);return <div key={idx} style={{marginTop:7,padding:8,borderLeft:`4px solid ${color}`,background:storeTint(color),borderRadius:6,fontSize:13}}><strong>{loc?.name||'Store'}</strong> · {g.days.map(i=>weekDays[i].toLocaleDateString(undefined,{weekday:'short'})).join(', ')} · {fmtTime(g.start)}–{fmtTime(g.end)}</div>;})}</div>}
     <div className="field">
-      <label>Days</label>
+      <label>Days for {locations.find(l=>l.id===locationId)?.name||'current store'}</label>
       <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
         <button type="button" className="btn ghost" style={{width:'auto',padding:'7px 10px'}} onClick={weekdays}>Mon–Fri</button>
         <button type="button" className="btn ghost" style={{width:'auto',padding:'7px 10px'}} onClick={selectAll}>Every day</button>
@@ -271,7 +279,7 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
     </div>
 
     {error&&<div className="error">{error}</div>}
-    <button type="button" className="btn" onClick={save} disabled={busy}>{busy?'Saving…':`Add ${selectedDays.length||0} Shift${selectedDays.length===1?'':'s'}`}</button>
+    <button type="button" className="btn" onClick={save} disabled={busy}>{busy?'Saving…':`Save ${groups.reduce((n,g)=>n+g.days.length,0)+selectedDays.length} Shift${groups.reduce((n,g)=>n+g.days.length,0)+selectedDays.length===1?'':'s'}`}</button>
   </div></div>;
 }
 
