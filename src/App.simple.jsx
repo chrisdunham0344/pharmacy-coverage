@@ -62,8 +62,7 @@ function ScheduleForm({ people, locations, onClose, onSaved, me }) {
   const [personId,setPersonId]=useState(people[0]?.id||'');
   const [locationId,setLocationId]=useState('');
   const [date,setDate]=useState(ymd(new Date()));
-  const [start,setStart]=useState('09:00');
-  const [end,setEnd]=useState('17:00');
+  const [dayTimes,setDayTimes]=useState({});
   const [busy,setBusy]=useState(false); const [error,setError]=useState('');
   useEffect(()=>{ if(!locationId && locations[0]) setLocationId(locations[0].id); },[locations,locationId]);
   async function save(e){
@@ -163,16 +162,14 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
       return;
     }
     setSelectedDays(current=>current.includes(i)?current.filter(day=>day!==i):[...current,i].sort((a,b)=>a-b));
+    setDayTimes(current=>current[i]?current:{...current,[i]:{start:'09:00',end:'17:00'}});
   }
   function changeLocation(nextLocationId){
     if(nextLocationId===locationId) return;
     setGroups(current=>{
       const updated=selectedDays.length
-        ? [...current.filter(x=>x.locationId!==locationId),{locationId,days:selectedDays,start,end}]
+        ? [...current.filter(x=>x.locationId!==locationId),{locationId,days:selectedDays}]
         : current;
-      const nextGroup=updated.find(g=>g.locationId===nextLocationId);
-      setStart(nextGroup?.start||'09:00');
-      setEnd(nextGroup?.end||'17:00');
       return updated;
     });
     setSelectedDays([]);
@@ -186,15 +183,14 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
   async function save(){
     setError('');
     if(!personId||!locationId){setError('Choose an employee and store.');return;}
-    const allGroups=[...groups.filter(g=>g.locationId!==locationId),...(selectedDays.length?[{locationId,days:selectedDays,start,end}]:[])];
+    const allGroups=[...groups,...(selectedDays.length?[{locationId,days:selectedDays}]:[])];
     if(!allGroups.length){setError('Choose at least one day.');return;}
-    if(allGroups.some(g=>g.start>=g.end)){setError('The end time has to be after the start time for every group.');return;}
+    const dayEntries=allGroups.flatMap(g=>g.days.map(i=>({i,locationId:g.locationId,time:dayTimes[i]||{start:'09:00',end:'17:00'}})));
+    if(dayEntries.some(x=>x.time.start>=x.time.end)){setError('Each day needs an end time after its start time.');return;}
     const assignedDays=allGroups.flatMap(g=>g.days);
     if(new Set(assignedDays).size!==assignedDays.length){setError('A day is assigned more than once. Clear or change the duplicate day before saving.');return;}
     setBusy(true);
-    const rows=allGroups.flatMap(g=>g.days.map(i=>({
-      shift_date:ymd(weekDays[i]),location_id:g.locationId,person_id:personId,start_time:g.start,end_time:g.end
-    })));
+    const rows=dayEntries.map(({i,locationId,time})=>({shift_date:ymd(weekDays[i]),location_id:locationId,person_id:personId,start_time:time.start,end_time:time.end}));
     const {data,error:saveError}=await supabase.from('simple_shifts').insert(rows).select();
     if(saveError){
       setError(saveError.message.includes('overlap')||saveError.message.includes('no_overlap')
@@ -204,7 +200,7 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
       return;
     }
     const person=activePeople.find(p=>p.id===personId);
-    const summary=allGroups.map(g=>`${locations.find(l=>l.id===g.locationId)?.name||'Store'} (${g.days.length})`).join(', ');
+    const summary=dayEntries.map(x=>`${locations.find(l=>l.id===x.locationId)?.name||'Store'} ${fmtTime(x.time.start)}–${fmtTime(x.time.end)}`).join(', ');
     await sendPush({
       title:'Rx Staff schedule updated',
       body:`${person?.name||'Someone'} was scheduled this week: ${summary}.`,
@@ -267,10 +263,7 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
     </div>
 
     <div className="field"><label>Employee</label><select value={personId} onChange={e=>setPersonId(e.target.value)}>{activePeople.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
-    <div className="row-2">
-      <div className="field"><label>Store</label><select value={locationId} onChange={e=>changeLocation(e.target.value)}>{locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
-      <div className="row-2" style={{gap:8}}><div className="field"><label>Start</label><input type="time" value={start} onChange={e=>setStart(e.target.value)}/></div><div className="field"><label>End</label><input type="time" value={end} onChange={e=>setEnd(e.target.value)}/></div></div>
-    </div>
+    <div className="field"><label>Store</label><select value={locationId} onChange={e=>changeLocation(e.target.value)}>{locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
 
     <div className="field">
       <label>Days for {locations.find(l=>l.id===locationId)?.name||'current store'}</label>
@@ -287,11 +280,13 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
           const dayLocation=selected?locations.find(l=>l.id===locationId):assignedLocation;
           const color=dayLocation?storeColor(dayLocation,locations):null;
           const has=existingForDay(i).length>0;
-          return <button key={ymd(d)} type="button" onClick={()=>toggleDay(i)} style={{padding:'10px 4px',borderRadius:9,border:dayLocation?`2px solid ${color}`:(selected?'2px solid var(--accent)':'1px solid var(--line-strong)'),background:dayLocation?storeTint(color):(selected?'var(--accent-soft)':'#fff'),fontWeight:selected||assigned?700:500}}>
-            <div style={{fontSize:11,color:'var(--muted)'}}>{d.toLocaleDateString(undefined,{weekday:'short'})}</div>
-            <div>{d.getDate()}</div>
-            {has&&<div style={{fontSize:10,color:'var(--muted)',marginTop:3,fontWeight:700}}>SLATED</div>}
-          </button>;
+          const time=dayTimes[i]||{start:'09:00',end:'17:00'};
+          return <div key={ymd(d)} style={{padding:'6px 2px',borderRadius:9,border:dayLocation?`2px solid ${color}`:'1px solid var(--line-strong)',background:dayLocation?storeTint(color):'#fff',textAlign:'center'}}>
+            <button type="button" onClick={()=>toggleDay(i)} style={{width:'100%',border:0,background:'transparent',padding:'3px 0',fontWeight:selected||assigned?700:500}}>
+              <div style={{fontSize:11,color:'var(--muted)'}}>{d.toLocaleDateString(undefined,{weekday:'short'})}</div><div>{d.getDate()}</div>{has&&<div style={{fontSize:9,color:'var(--muted)',marginTop:2,fontWeight:700}}>SLATED</div>}
+            </button>
+            {(selected||assigned)&&<div style={{display:'grid',gap:3,marginTop:4}}><input aria-label="Start time" type="time" value={time.start} onChange={e=>setDayTimes(v=>({...v,[i]:{...time,start:e.target.value}}))} style={{width:'100%',minWidth:0,fontSize:10,padding:'3px 0'}}/><input aria-label="End time" type="time" value={time.end} onChange={e=>setDayTimes(v=>({...v,[i]:{...time,end:e.target.value}}))} style={{width:'100%',minWidth:0,fontSize:10,padding:'3px 0'}}/></div>}
+          </div>;
         })}
       </div>
     </div>
