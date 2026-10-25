@@ -62,13 +62,15 @@ function ScheduleForm({ people, locations, onClose, onSaved, me }) {
   const [personId,setPersonId]=useState(people[0]?.id||'');
   const [locationId,setLocationId]=useState('');
   const [date,setDate]=useState(ymd(new Date()));
-  const [dayTimes,setDayTimes]=useState({});
+  const [start,setStart]=useState('09:00');
+  const [end,setEnd]=useState('17:00');
   const [busy,setBusy]=useState(false); const [error,setError]=useState('');
   useEffect(()=>{ if(!locationId && locations[0]) setLocationId(locations[0].id); },[locations,locationId]);
   async function save(e){
     e.preventDefault(); setBusy(true); setError('');
     const {data:{user}}=await supabase.auth.getUser();
     if(!locationId){setError('Choose a store.');setBusy(false);return;}
+    if(start>=end){setError('The end time has to be after the start time.');setBusy(false);return;}
     const {data,error}=await supabase.from('simple_shifts').insert({
       shift_date:date, location_id:locationId, person_id:personId,
       start_time:start, end_time:end, created_by:personId
