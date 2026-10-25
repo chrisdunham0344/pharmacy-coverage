@@ -257,7 +257,6 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
       <div className="row-2" style={{gap:8}}><div className="field"><label>Start</label><input type="time" value={start} onChange={e=>setStart(e.target.value)}/></div><div className="field"><label>End</label><input type="time" value={end} onChange={e=>setEnd(e.target.value)}/></div></div>
     </div>
 
-    {groups.length>0&&<div className="form-card" style={{marginBottom:12}}><strong>Assigned groups</strong>{groups.map((g,idx)=>{const loc=locations.find(l=>l.id===g.locationId);const color=storeColor(loc,locations);return <div key={idx} style={{marginTop:7,padding:8,borderLeft:`4px solid ${color}`,background:storeTint(color),borderRadius:6,fontSize:13}}><strong>{loc?.name||'Store'}</strong> · {g.days.map(i=>weekDays[i].toLocaleDateString(undefined,{weekday:'short'})).join(', ')} · {fmtTime(g.start)}–{fmtTime(g.end)}</div>;})}</div>}
     <div className="field">
       <label>Days for {locations.find(l=>l.id===locationId)?.name||'current store'}</label>
       <div style={{display:'flex',gap:6,flexWrap:'wrap',marginBottom:8}}>
@@ -268,8 +267,12 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
       <div style={{display:'grid',gridTemplateColumns:'repeat(7,minmax(0,1fr))',gap:6}}>
         {weekDays.map((d,i)=>{
           const selected=selectedDays.includes(i);
+          const assigned=groups.find(g=>g.days.includes(i));
+          const assignedLocation=assigned?locations.find(l=>l.id===assigned.locationId):null;
+          const dayLocation=selected?locations.find(l=>l.id===locationId):assignedLocation;
+          const color=dayLocation?storeColor(dayLocation,locations):null;
           const has=existingForDay(i).length>0;
-          return <button key={ymd(d)} type="button" onClick={()=>toggleDay(i)} style={{padding:'10px 4px',borderRadius:9,border:selected?'2px solid var(--accent)':'1px solid var(--line-strong)',background:selected?'var(--accent-soft)':'#fff',fontWeight:selected?700:500}}>
+          return <button key={ymd(d)} type="button" onClick={()=>toggleDay(i)} style={{padding:'10px 4px',borderRadius:9,border:dayLocation?`2px solid ${color}`:(selected?'2px solid var(--accent)':'1px solid var(--line-strong)'),background:dayLocation?storeTint(color):(selected?'var(--accent-soft)':'#fff'),fontWeight:selected||assigned?700:500}}>
             <div style={{fontSize:11,color:'var(--muted)'}}>{d.toLocaleDateString(undefined,{weekday:'short'})}</div>
             <div>{d.getDate()}</div>
             {has&&<div style={{fontSize:10,color:'var(--muted)',marginTop:3,fontWeight:700}}>SLATED</div>}
