@@ -253,7 +253,7 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
 
     <div className="field"><label>Employee</label><select value={personId} onChange={e=>setPersonId(e.target.value)}>{activePeople.map(p=><option key={p.id} value={p.id}>{p.name}</option>)}</select></div>
     <div className="row-2">
-      <div className="field"><label>Store</label><select value={locationId} onChange={e=>setLocationId(e.target.value)}>{locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
+      <div className="field"><label>Store</label><select value={locationId} onChange={e=>changeLocation(e.target.value)}>{locations.map(l=><option key={l.id} value={l.id}>{l.name}</option>)}</select></div>
       <div className="row-2" style={{gap:8}}><div className="field"><label>Start</label><input type="time" value={start} onChange={e=>setStart(e.target.value)}/></div><div className="field"><label>End</label><input type="time" value={end} onChange={e=>setEnd(e.target.value)}/></div></div>
     </div>
 
