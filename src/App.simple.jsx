@@ -154,12 +154,16 @@ function QuickSchedule({ people, locations, weekStart, shifts, onClose, onSaved,
   };
 
   function toggleDay(i){
-    const assigned=groups.some(g=>g.days.includes(i));
-    if(assigned){setError('That day is already assigned to another store. Switch to that store to change it.');return;}
     setError('');
-    setSelectedDays(d=>d.includes(i)?d.filter(x=>x!==i):[...d,i].sort((a,b)=>a-b));
+    const assigned=groups.find(g=>g.days.includes(i));
+    if(assigned){
+      if(assigned.locationId!==locationId){setError('That day is assigned to another store. Switch to that store to change it.');return;}
+      setGroups(current=>current.map(g=>g.locationId===locationId?{...g,days:g.days.filter(day=>day!==i)}:g).filter(g=>g.days.length));
+      setSelectedDays(current=>current.filter(day=>day!==i));
+      return;
+    }
+    setSelectedDays(current=>current.includes(i)?current.filter(day=>day!==i):[...current,i].sort((a,b)=>a-b));
   }
-
   function changeLocation(nextLocationId){
     if(nextLocationId===locationId) return;
     if(selectedDays.length) setGroups(g=>[...g.filter(x=>x.locationId!==locationId),{locationId,days:selectedDays,start,end}]);
